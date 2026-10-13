@@ -74,5 +74,7 @@ node runs/06-arena-imagegen/run.mjs        # 底图用 assets/ 里 Arena 生成�
 ## 说明
 
 - 所有项目版权归原作者所有，`projects/<name>/LICENSE` 为原始许可证；`write-then-publish` 为**个人非商业**许可，`MarkCardStudio` 为 GPL-3.0。
-- `archive/` 是上一轮的图文卡片方向成果，保留但不参与本轮结论。
+- `archive/` 存放已完成、不再改动的历史轮次：
+  - `archive/` 根目录 = 「AI 科普图文 · 纯代码渲染」那一轮（信息图 / 卡片 / 长图 / 动图，含 `localimage/` 本地渲染服务）
+  - `archive/round2-infographics/` = 同轮次的 5 个 vendor 项目与 6 个 run 的完整现场
 - 生成时间：2026-10-13/14。

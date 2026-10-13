@@ -1,0 +1,70 @@
+schema_version: "1"
+name: resource-list
+lifecycle: recommended
+body_format: json_array
+version: "1.0.0"
+since: "1.5.0"
+category: sprint4
+input_positions: [json]
+serves: [readability, conversion]
+content_types: [tutorial, report]
+industry: [general]
+tags: [sprint4, resource-list, links, references, reading-list]
+position: closing
+when_to_use: |
+  延伸阅读、工具推荐、参考资料整理。
+  适合文章结尾的资源汇总，比 toolbox 更轻量。
+when_not_to_use: |
+  需要分类说明的资源用 toolbox；
+  单纯列清单用 checklist。
+pairs_well_with: [toolbox, checklist, cta]
+avoid_combining_with: []
+anti_pattern: |
+  内容必须写成 JSON 数组格式：[{"name":"...","url":"..."}]，不支持 pipe 分隔行；
+  JSON key 是 desc（不是 description），写错 key 会导致简介消失；
+  url 不以 http:// 或 https:// 开头则不会渲染成链接；
+  资源名称写太长（简洁命名，说明放 desc）。
+fields:
+  required:
+    - name: name
+      description: 资源名称（JSON key：name）
+      example: "md2wechat 官网"
+  optional:
+    - name: desc
+      description: 资源简介（JSON key：desc，不是 description，可省略）
+      example: "在线 Markdown 转公众号工具"
+    - name: icon
+      description: 图标 emoji（JSON key：icon，可省略，无则显示首字母）
+      example: "🛠"
+  compatibility:
+    - name: url
+      description: 链接地址（渲染器当前不生成外部链接）
+      example: "https://md2wechat.com"
+example: |
+  :::resource-list
+  [{"name":"md2wechat","desc":"公众号 Markdown 转换与发布引擎","icon":"M"},{"name":"md2wechat skill","desc":"给 CLI 和 Agent 使用的能力库","icon":"CLI"}]
+  :::
+agent_contract:
+  body_format: json_array
+  required:
+    - name
+  optional:
+    - desc
+    - icon
+  enums: {}
+  defaults:
+    icon: uppercase-first-character
+  invalid:
+    - non-array
+    - empty-array
+    - blank-name
+    - wrong-type-known-field
+  ignored:
+    - unknown-keys
+  legacy:
+    - url-accepted-and-ignored
+  applicability: {}
+metadata:
+  author: md2wechat
+  provenance: builtin
+  inspired_by: "advanced-layout-modules-guide.md#resource-list"

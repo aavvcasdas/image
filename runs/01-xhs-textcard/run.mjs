@@ -19,7 +19,7 @@ const OUT_DIR = path.join(repoRoot, 'runs/01-xhs-textcard/out');
 const CONTENT = fs.readFileSync(path.join(repoRoot, 'runs/01-xhs-textcard/content.md'), 'utf8');
 const TITLE = '低谷期最该做的 5 件事';
 // 选 4 个风格差异大的模板，证明模板系统真的在渲染
-const TEMPLATES = ['notion-style', 'swiss-studio', 'starry-night', 'elegant-book'];
+const TEMPLATES = ['notion-style', 'swiss-studio', 'starry-night'];
 
 const { server, url } = await serve(APP_DIR);
 const browser = await launch({ width: 1600, height: 1000 });

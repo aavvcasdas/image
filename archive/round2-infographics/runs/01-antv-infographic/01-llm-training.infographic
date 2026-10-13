@@ -1,0 +1,16 @@
+infographic sequence-steps-badge-card
+data
+  title 大语言模型是怎么学会说话的
+  desc 三次"训练"塑造一个会说人话的模型
+  sequences
+    - label 第一步 · 预训练
+      desc 读遍互联网文本，学会"下一个词该是什么"
+      icon book open
+    - label 第二步 · 指令微调
+      desc 用人工写的问答示范，学会"听懂指令"
+      icon chat lines
+    - label 第三步 · 对齐
+      desc 由人类打分排序，学会"好好说话、不乱说"
+      icon shield check
+theme
+  palette #4f46e5 #06b6d4 #f59e0b

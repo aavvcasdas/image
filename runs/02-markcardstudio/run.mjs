@@ -25,7 +25,6 @@ const DRAFT_KEY = 'markcard_studio_draft_v1';
 const THEMES = [
   { theme: '瑞士网格', slug: 'swiss-grid' },      // 国际主义网格 + 荧光红标记
   { theme: '苹果备忘录', slug: 'apple-notes' },    // 横线纸 + 手写划线 + 黄色荧光笔
-  { theme: '暗黑极客', slug: 'cyberpunk' },        // 终端扫描线 + 霓虹发光边框
   { theme: '复古报刊', slug: 'newspaper' },        // 旧报纸 + 首字下沉 + 双线报头
 ];
 

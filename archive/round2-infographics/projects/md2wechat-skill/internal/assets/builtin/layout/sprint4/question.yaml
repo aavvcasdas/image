@@ -1,0 +1,74 @@
+schema_version: "1"
+name: question
+lifecycle: recommended
+body_format: dialogue
+compatible_body_formats: [json_array]
+version: "1.0.0"
+since: "1.5.0"
+category: sprint4
+input_positions: [prefix-dsl]
+serves: [readability, conversion]
+content_types: [tutorial, report]
+industry: [general]
+tags: [sprint4, question, qa, faq-inline, interactive]
+position: body
+when_to_use: |
+  FAQ、读者问题、学习测验。
+  适合在正文中嵌入问答，比 faq 更轻量。
+when_not_to_use: |
+  商业转化场景的顾虑处理用 faq；
+  单个问题直接写正文。
+pairs_well_with: [faq, callout, summary]
+avoid_combining_with: []
+anti_pattern: |
+  新内容使用 Q:/A: 成对书写；
+  q（问题）和 a（回答）是 JSON key 的实际名称，不是 question 和 answer；
+  问题写成陈述句而非疑问句；
+  回答写太长应该拆成正文段落。
+fields:
+  required:
+    - name: q
+      description: 问题内容（JSON key：q，以问句形式表达）
+      example: "模块是否支持所有主题？"
+      value_type: string
+    - name: a
+      description: 回答内容（JSON key：a，简洁直接）
+      example: "是的，所有主题都会渲染这些模块。"
+      value_type: string
+  optional: []
+fields_compatibility_only: true
+body:
+  min_items: 2
+  allowed_prefixes: ["Q:", "A:"]
+  required_pairs:
+    - [Q, A]
+example: |
+  :::question
+  Q: md2wechat 是排版工具吗？
+  A: 更准确地说，它是 Agent 公众号发布引擎，负责把草稿变成可发布、像你、能转化的文章。
+
+  Q: 第一次应该怎么试？
+  A: 给一篇草稿或一个选题，先让 Agent 30 分钟内出一版高级稿。
+  :::
+example_assert_contains: "md2wechat 是排版工具吗？"
+agent_contract:
+  body_format: dialogue
+  required:
+    - Q
+    - A
+  optional: []
+  enums: {}
+  defaults: {}
+  invalid:
+    - lowercase-prefix
+    - missing-Q-or-A
+    - blank-Q-or-A
+    - zero-pairs
+  ignored: []
+  legacy:
+    - json-array
+  applicability: {}
+metadata:
+  author: md2wechat
+  provenance: builtin
+  inspired_by: "advanced-layout-modules-guide.md#question"

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AI 是怎么「看」一张胸片的</title>
+<style>
+/* 科普机制示意图：深蓝 + 青 + 琥珀高亮，与头图（模型生图）同一色系 */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{width:1080px;background:#eef3f9;font-family:'Noto Sans SC',sans-serif;color:#0f1b33;-webkit-font-smoothing:antialiased}
+.page{padding:64px 72px 56px;background:linear-gradient(180deg,#ffffff 0%,#f2f6fc 100%)}
+.kicker{display:inline-flex;align-items:center;gap:10px;font-size:20px;font-weight:700;letter-spacing:.18em;color:#2f6f8f;
+  border:1px solid #bcd7e4;background:#eaf5fb;border-radius:999px;padding:8px 18px}
+h1{font-size:74px;font-weight:900;line-height:1.1;letter-spacing:-.02em;margin:26px 0 0}
+h1 em{font-style:normal;color:#0f7d8c}
+.lede{font-size:28px;line-height:1.62;color:#41536e;margin-top:22px;max-width:34ch}
+.rule{height:2px;background:#d5e2ef;margin:34px 0 30px}
+.hero-img{width:100%;border-radius:24px;border:1px solid #dbe6f2;display:block}
+.hero-cap{font-size:21px;color:#6b7c94;margin-top:14px;line-height:1.6}
+.steps{margin-top:38px;display:flex;flex-direction:column;gap:16px}
+.step{display:flex;gap:20px;align-items:stretch;background:#fff;border:1px solid #e0e9f3;border-radius:18px;padding:22px 24px}
+.step .n{flex:0 0 auto;width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  font-weight:900;font-size:27px;color:#fff;background:#1b4a8c}
+.step.hi .n{background:#d97706}
+.step .t{font-size:30px;font-weight:800;margin-bottom:7px}
+.step .d{font-size:24px;line-height:1.55;color:#4a5c76}
+.step.hi{border-color:#f3d5a3;background:#fffaf0}
+.note{margin-top:34px;border-left:6px solid #d97706;background:#fff8ec;border-radius:0 16px 16px 0;padding:22px 26px}
+.note b{color:#a35a05}
+.note p{font-size:23px;line-height:1.62;color:#5c4a2e}
+.foot{margin-top:34px;display:flex;justify-content:space-between;gap:36px;border-top:1px solid #d5e2ef;padding-top:20px}
+.foot p{font-size:20px;line-height:1.6;color:#7b8aa1}
+.foot .r{text-align:right;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">医学影像 · AI 科普 · 机制示意</div>
+  <h1>AI 是怎么<em>「看」</em><br>一张胸片的？</h1>
+  <p class="lede">它并不像医生那样"看懂"影像，而是把片子拆成数字、逐层提取特征，最后把<strong>可疑的区域圈出来</strong>。</p>
+  <div class="rule"></div>
+
+  <img class="hero-img" src="assets/gen-ai-radiology.png" alt="胸片与 AI 分析面板示意图">
+  <p class="hero-cap">示意图：左侧是数字化的胸片，右侧是算法给出的区域提示。本图为风格化示意，不代表任何具体产品的界面与算法细节。</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="n">1</div>
+      <div><div class="t">影像数字化</div><div class="d">一张片子先被拆成一张巨大的灰度数字表，每个像素记录一个亮度值。</div></div>
+    </div>
+    <div class="step">
+      <div class="n">2</div>
+      <div><div class="t">卷积提特征</div><div class="d">用小窗口在图上滑动，先找最基础的线索：边缘、明暗过渡、纹理。</div></div>
+    </div>
+    <div class="step">
+      <div class="n">3</div>
+      <div><div class="t">逐层抽象</div><div class="d">层数越深，组合出的概念越"大"：从线条到阴影块，再到器官轮廓那样的区域模式。</div></div>
+    </div>
+    <div class="step hi">
+      <div class="n">4</div>
+      <div><div class="t">热力图定位</div><div class="d">输出一张"可疑程度"热力图：哪里异常、有多像——这是 AI 唯一真正给出的东西。</div></div>
+    </div>
+    <div class="step hi">
+      <div class="n">5</div>
+      <div><div class="t">医生复核</div><div class="d">医生结合病史与其它检查做最终判断。AI 的角色是"第二双眼睛"，不是最终结论。</div></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <p><b>边界与提醒：</b>AI 辅助读片目前已在<strong>部分</strong>筛查场景获批使用（例如乳腺 X 线筛查、糖尿病视网膜病变筛查），并且定位始终是<strong>辅助</strong>：它负责把可疑区域先挑出来，结论仍由医生给出。本图为机制示意，<strong>不构成任何诊断依据</strong>，也未使用真实病例或患者数据。</p>
+  </div>
+
+  <div class="foot">
+    <p>图型：机制科普示意图（非解剖教学图）<br>图稿 ID：AI-CXR-EXPLAINER · v1.0 · 2026-10</p>
+    <div class="r">头图：Arena 模型生图<br>排版：纯代码渲染（HTML + CSS）</div>
+  </div>
+</div>
+</body>
+</html>
