@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>信息卡 · 为什么模型算不对 7×8 却会订机票</title>
+<style>
+  /* qiaomu-info-card-designer 基础卡片规范（600px 宽 / 2x 截图 = 1200px）
+     原技能用本地 仓耳今楷02（19MB），此处替换为 Noto Serif SC（同一视觉家族：中文衬线楷感）*/
+  :root{
+    --color-bg:#f5f3ed;
+    --color-text:#1a1a1a;
+    --color-accent:#2c3e8c;
+    --color-muted:#555;
+    --font-title:"Noto Serif SC",serif;
+    --font-body:"Noto Serif SC",serif;
+    --font-label:"Noto Sans SC",sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#fff;font-family:var(--font-body)}
+  .card{
+    width:600px;background:var(--color-bg);padding:38px;
+    display:flex;flex-direction:column;gap:24px;position:relative;color:var(--color-text);
+  }
+  /* 顶部标签条 */
+  .kicker{font-family:var(--font-label);font-size:16px;letter-spacing:.18em;color:var(--color-accent);
+          text-transform:uppercase;display:flex;justify-content:space-between}
+  h1{font-size:56px;line-height:1.18;font-weight:400;letter-spacing:-.01em}
+  h1 .hl{color:var(--color-accent)}
+  .sub{font-size:22px;line-height:1.5;color:var(--color-muted)}
+
+  .rule{height:2px;background:var(--color-text);opacity:.85}
+
+  .item{display:flex;flex-direction:column;gap:8px;padding-bottom:20px;border-bottom:1px solid #d8d4c8}
+  .item:last-of-type{border-bottom:0;padding-bottom:0}
+  .item .no{font-family:var(--font-mono);font-size:16px;color:var(--color-accent);letter-spacing:.1em}
+  .item h3{font-size:28px;line-height:1.32;font-weight:400}
+  .item p{font-size:20px;line-height:1.6;color:var(--color-muted)}
+
+  .quote{border-left:4px solid var(--color-accent);padding:4px 0 4px 18px;
+         font-size:22px;line-height:1.55;color:var(--color-text)}
+  .quote .src{display:block;font-size:15px;color:#777;margin-top:8px;font-family:var(--font-label)}
+
+  .foot{display:flex;justify-content:space-between;align-items:baseline;
+        border-top:1px solid #d8d4c8;padding-top:16px;
+        font-family:var(--font-label);font-size:15px;color:var(--color-muted)}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="kicker"><span>AI 科普图鉴 · 004</span><span>INFO CARD</span></div>
+
+  <h1>模型算不对 7×8，<br>却能帮你<span class="hl">订机票</span></h1>
+  <div class="sub">语言能力和做事能力，是两套完全不同的东西。</div>
+
+  <div class="rule"></div>
+
+  <div class="item">
+    <span class="no">01 / 它的老本行</span>
+    <h3>LLM 只会预测下一个词</h3>
+    <p>乘法要靠「背过的模式」碰运气，位数一多就出错。它不是计算器，是语言的概率机器。</p>
+  </div>
+
+  <div class="item">
+    <span class="no">02 / 转机</span>
+    <h3>把「算」和「查」外包出去</h3>
+    <p>给它挂上计算器、搜索、日历、下单接口——模型只负责决定「什么时候该用哪把工具」。</p>
+  </div>
+
+  <div class="item">
+    <span class="no">03 / 循环</span>
+    <h3>想一步 → 调一次 → 看结果 → 再想</h3>
+    <p>工具返回什么，会改变它下一步的计划。这就是 Agent 和聊天机器人的分水岭。</p>
+  </div>
+
+  <div class="item">
+    <span class="no">04 / 边界</span>
+    <h3>能力上限由工具决定，调度水平由模型决定</h3>
+    <p>没有支付接口，它再聪明也下不了单；工具齐全，小模型也能跑通完整流程。</p>
+  </div>
+
+  <div class="quote">
+    与其指望模型把事做对，不如先把要做的事，变成它能调用的工具。
+    <span class="src">—— 这一期最想让你记住的一句话</span>
+  </div>
+
+  <div class="foot"><span>AI 科普图鉴 · 第 4 期</span><span>2026</span></div>
+</div>
+</body>
+</html>

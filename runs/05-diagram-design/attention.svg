@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img"
+         aria-labelledby="dg-title dg-desc" id="attention-root">
+      <title id="dg-title">自注意力：处理「垫子」时对全句的注意力权重</title>
+      <desc id="dg-desc">由「小猫」「坐」「在」「把」「垫子」五个词组成的一句话。处理「垫子」时，
+        对「小猫」的注意力权重 0.42，对「坐」0.31，对「把」0.09，对「在」0.08，其他 0.10。</desc>
+
+      <defs>
+      <style>#attention-root { --color-paper:#f5f5f5;
+    --color-paper-2:#ececec;
+    --color-ink:#2d3142;
+    --color-muted:#4f5d75;
+    --color-soft:#5a6580;
+    --color-rule:rgba(45,49,66,0.12);
+    --color-rule-solid:#bfc0c0;
+    --color-accent:#bf4520;
+    --color-accent-tint:rgba(191,69,32,0.08);
+    --font-sans:'Geist','Noto Sans SC','PingFang SC',system-ui,sans-serif;
+    --font-mono:'Geist Mono',ui-monospace,'SF Mono',monospace; }
+      #attention-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #attention-root .lede { font-size:16px;line-height:1.7;color:var(--color-muted);margin-top:14px;max-width:760px }
+      #attention-root .diagram-container { background:var(--color-paper-2);border:1px solid var(--color-rule);padding:24px;
+                     overflow-x:auto }
+      #attention-root text { font-family:'Geist','Noto Sans SC','PingFang SC',sans-serif }
+      #attention-root .node-name { font-size:14px;font-weight:600;fill:var(--color-ink) }
+      #attention-root .node-sublabel { font-size:11px;font-weight:400;fill:var(--color-soft) }
+      #attention-root .axis-label { font-family:'Geist Mono',monospace;font-size:11px;font-weight:500;fill:var(--color-soft);
+              letter-spacing:.08em }
+      #attention-root .edge-label { font-size:11px;font-weight:500;fill:var(--color-accent) }
+      #attention-root .caption { font-size:12px;fill:var(--color-soft) }</style>
+        <marker id="attention-head-accent" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <polygon points="0 0, 8 4, 0 8" fill="#bf4520"/>
+        </marker>
+        <marker id="attention-head-muted" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <polygon points="0 0, 8 4, 0 8" fill="#bfc0c0"/>
+        </marker>
+      </defs>
+
+      <!-- 行标题 -->
+      <text class="axis-label" x="48" y="60">输入序列 · TOKENS</text>
+      <text class="axis-label" x="912" y="60" text-anchor="end">查询：垫子</text>
+
+      <!-- 注意力弧线（先画线，再画遮罩，最后画节点，避免半透明填充透出线条） -->
+      <!-- 小猫 权重 0.42（focal）-->
+      <path d="M 608 208 C 520 120, 300 120, 212 208" fill="none"
+            stroke="#bf4520" stroke-width="4" marker-end="url(#attention-head-accent)"/>
+      <!-- 坐 权重 0.31 -->
+      <path d="M 624 208 C 560 144, 424 144, 364 208" fill="none"
+            stroke="#bf4520" stroke-width="3" marker-end="url(#attention-head-accent)" opacity=".72"/>
+      <!-- 把 权重 0.09 -->
+      <path d="M 640 208 C 620 168, 560 168, 540 208" fill="none"
+            stroke="#bfc0c0" stroke-width="1.5" marker-end="url(#attention-head-muted)"/>
+      <!-- 在 权重 0.08 -->
+      <path d="M 656 208 C 664 168, 700 168, 712 208" fill="none"
+            stroke="#bfc0c0" stroke-width="1.5" marker-end="url(#attention-head-muted)"/>
+
+      <!-- 遮罩层：不透明底，挡住穿过的弧线 -->
+      <rect x="148" y="208" width="128" height="64" rx="8" fill="#ececec"/>
+      <rect x="300" y="208" width="128" height="64" rx="8" fill="#ececec"/>
+      <rect x="452" y="208" width="128" height="64" rx="8" fill="#ececec"/>
+      <rect x="604" y="208" width="128" height="64" rx="8" fill="#ececec"/>
+      <rect x="756" y="208" width="128" height="64" rx="8" fill="#ececec"/>
+
+      <!-- 节点层 -->
+      <g>
+        <rect x="148" y="208" width="128" height="64" rx="8" fill="#f5f5f5" stroke="#bf4520" stroke-width="2"/>
+        <text class="node-name" x="212" y="238" text-anchor="middle">小猫</text>
+        <text class="node-sublabel" x="212" y="256" text-anchor="middle">主语 · 施动者</text>
+      </g>
+      <g>
+        <rect x="300" y="208" width="128" height="64" rx="8" fill="#f5f5f5" stroke="#bf4520" stroke-width="2"/>
+        <text class="node-name" x="364" y="238" text-anchor="middle">坐</text>
+        <text class="node-sublabel" x="364" y="256" text-anchor="middle">动作</text>
+      </g>
+      <g>
+        <rect x="452" y="208" width="128" height="64" rx="8" fill="#f5f5f5" stroke="#bfc0c0" stroke-width="1"/>
+        <text class="node-name" x="516" y="238" text-anchor="middle">把</text>
+        <text class="node-sublabel" x="516" y="256" text-anchor="middle">虚词</text>
+      </g>
+      <!-- 查询节点：accent-tint 填充 -->
+      <g>
+        <rect x="604" y="208" width="128" height="64" rx="8" fill="#bf4520" stroke="#bf4520" stroke-width="2" fill-opacity="0.08"/>
+        <text class="node-name" x="668" y="238" text-anchor="middle">垫子</text>
+        <text class="node-sublabel" x="668" y="256" text-anchor="middle">焦点 · 正在处理</text>
+      </g>
+      <g>
+        <rect x="756" y="208" width="128" height="64" rx="8" fill="#f5f5f5" stroke="#bfc0c0" stroke-width="1"/>
+        <text class="node-name" x="820" y="238" text-anchor="middle">上</text>
+        <text class="node-sublabel" x="820" y="256" text-anchor="middle">方位</text>
+      </g>
+
+      <!-- 权重标注 -->
+      <text class="edge-label" x="212" y="168" text-anchor="middle">0.42</text>
+      <text class="edge-label" x="364" y="168" text-anchor="middle">0.31</text>
+      <text class="axis-label" x="516" y="168" text-anchor="middle">0.09</text>
+      <text class="axis-label" x="820" y="168" text-anchor="middle">0.08</text>
+
+      <!-- 下半部分：分数 → 归一化 → 加权求和 -->
+      <line x1="48" y1="336" x2="912" y2="336" stroke="#bfc0c0" stroke-width="1"/>
+      <text class="axis-label" x="48" y="376">它做了什么</text>
+
+      <g>
+        <rect x="48" y="404" width="256" height="88" rx="8" fill="#f5f5f5" stroke="#bfc0c0" stroke-width="1"/>
+        <text class="node-name" x="72" y="436">1 · 打分</text>
+        <text class="node-sublabel" x="72" y="460">当前词的 Query，和每个词的 Key</text>
+        <text class="node-sublabel" x="72" y="476">做一次点积，得到一个分数</text>
+      </g>
+      <line x1="312" y1="448" x2="344" y2="448" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#attention-head-muted)"/>
+      <g>
+        <rect x="352" y="404" width="256" height="88" rx="8" fill="#f5f5f5" stroke="#bfc0c0" stroke-width="1"/>
+        <text class="node-name" x="376" y="436">2 · 归一化</text>
+        <text class="node-sublabel" x="376" y="460">Softmax 压成加起来等于 1 的</text>
+        <text class="node-sublabel" x="376" y="476">权重，也就是上面那组小数</text>
+      </g>
+      <line x1="616" y1="448" x2="648" y2="448" stroke="#4f5d75" stroke-width="1.5" marker-end="url(#attention-head-muted)"/>
+      <g>
+        <rect x="656" y="404" width="256" height="88" rx="8" fill="#bf4520" stroke="#bf4520" stroke-width="2" fill-opacity="0.08"/>
+        <text class="node-name" x="680" y="436">3 · 加权求和</text>
+        <text class="node-sublabel" x="680" y="460">按权重把每个词的信息混进来。</text>
+        <text class="node-sublabel" x="680" y="476">「垫子」于是带上了「小猫」的语义</text>
+      </g>
+
+      <text class="caption" x="48" y="544">权重由模型自己学出来，不是人标的规则；同一句话在不同层、不同头上，看重的东西也不同。</text>
+    </svg>
