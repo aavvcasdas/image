@@ -1,0 +1,8 @@
+{
+  "jobs": 3,
+  "tasks": [
+    { "promptFiles": ["prompts/02-steps-hallucination.md"], "image": "02-steps.png", "size": "1024x1024" },
+    { "promptFiles": ["prompts/01-cover-hallucination.md"], "image": "03-xhs-34.png",  "size": "768x1024" },
+    { "promptFiles": ["prompts/02-steps-hallucination.md"], "image": "04-wide.png",    "size": "1024x768" }
+  ]
+}

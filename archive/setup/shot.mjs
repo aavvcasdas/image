@@ -31,7 +31,7 @@ const flags = Object.fromEntries(
 const positional = args.filter((a) => !a.startsWith('--'));
 
 /** 从 $RENDER_HOME/node_modules 里按包名解析 ESM 入口并 import（不依赖 NODE_PATH） */
-async function importFromEnv(pkg) {
+export async function importFromEnv(pkg) {
   const dir = path.join(RENDER_HOME, 'node_modules', pkg);
   const pj = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
   const rel =
@@ -43,14 +43,14 @@ async function importFromEnv(pkg) {
   return import(pathToFileURL(path.join(dir, rel)).href);
 }
 
-async function loadChromium() {
+export async function loadChromium() {
   const chromium = (await importFromEnv('@sparticuz/chromium')).default;
   const puppeteer = (await importFromEnv('puppeteer-core')).default;
   return { chromium, puppeteer };
 }
 
 /** 把 @font-face 内联进 HTML，保证任何环境都能拿到中文字体 */
-function inlineFonts(html) {
+export function inlineFonts(html) {
   const dir = path.join(os.homedir(), '.fonts');
   const faces = [
     ['Noto Sans SC', 400, 'NotoSansSC-Regular.otf'],
@@ -73,7 +73,7 @@ function inlineFonts(html) {
   return html.includes('</head>') ? html.replace('</head>', style + '</head>') : style + html;
 }
 
-const SELFTEST_HTML = `<!doctype html><html><head><meta charset="utf-8"></head>
+export const SELFTEST_HTML = `<!doctype html><html><head><meta charset="utf-8"></head>
 <body style="margin:0"><div id="card" style="width:900px;padding:60px;background:#0f172a;color:#e8eefc;
   font-family:'Noto Sans SC',sans-serif">
   <div style="font-size:24px;letter-spacing:6px;color:#38bdf8;margin-bottom:20px">AI 科普 · 渲染自检</div>
@@ -81,6 +81,46 @@ const SELFTEST_HTML = `<!doctype html><html><head><meta charset="utf-8"></head>
   <div style="font-size:28px;line-height:1.7;color:#9fb3d1;margin-top:24px">
     中文标点、弯引号「测试」、数字 2026、英文 LLM/RAG 混排。</div>
 </div></body></html>`;
+
+
+/**
+ * renderHtmlToPng — 可复用的核心渲染函数（供 localimage 服务调用）
+ * @param {string} html      完整 HTML 字符串
+ * @param {string} outFile   输出 PNG 路径
+ * @param {{width?:number,height?:number,dpr?:number,selector?:string,timeoutMs?:number}} opts
+ */
+export async function renderHtmlToPng(html, outFile, opts = {}) {
+  const { chromium, puppeteer } = await loadChromium();
+  const executablePath = await chromium.executablePath();
+  const browser = await puppeteer.launch({
+    args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+    executablePath,
+    headless: 'shell',
+  });
+  try {
+    const page = await browser.newPage();
+    const dpr = Number(opts.dpr || 2);
+    await page.setViewport({
+      width: Number(opts.width || 1440),
+      height: Number(opts.height || 900),
+      deviceScaleFactor: dpr,
+    });
+    await page.setContent(inlineFonts(html), { waitUntil: 'load' });
+    await page.evaluate(() => document.fonts && document.fonts.ready);
+    await new Promise((r) => setTimeout(r, Number(opts.settleMs ?? 250)));
+    let target = page;
+    if (opts.selector) {
+      const el = await page.$(opts.selector);
+      if (!el) throw new Error(`selector not found: ${opts.selector}`);
+      target = el;
+    }
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    await target.screenshot({ path: outFile });
+    return outFile;
+  } finally {
+    await browser.close();
+  }
+}
 
 async function main() {
   const { chromium, puppeteer } = await loadChromium();
@@ -133,7 +173,9 @@ async function main() {
   }
 }
 
-main().catch((e) => {
+const isDirectRun = process.argv[1] &&
+  import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1]).href;
+if (isDirectRun) main().catch((e) => {
   console.error('✘ 渲染失败:', e.message);
   if (/libnspr4|error while loading shared libraries/.test(e.message)) {
     console.error('  提示：需要 export LD_LIBRARY_PATH=$RENDER_HOME/lib:$LD_LIBRARY_PATH');

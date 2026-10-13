@@ -11,23 +11,28 @@
 | 目录 | 上游 | ⭐ | 许可证 | 精简掉了什么 |
 |---|---|---|---|---|
 | `diagram-design/` | [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) @ `1a0b37a` | 53.7k | MIT | `docs/screenshots`、`docs/hero`、`docs/pr-previews`（约 13MB 图片） |
-| `baoyu-skills/` | [JimLiu/baoyu-skills](https://github.com/JimLiu/baoyu-skills) @ `1567581` | 26.6k | MIT | 只搬了 5 个技能（见下），其余技能与 16MB `screenshots/` 未搬 |
+| `baoyu-skills/` | [JimLiu/baoyu-skills](https://github.com/JimLiu/baoyu-skills) @ `1567581` | 26.6k | MIT | 只搬了 6 个技能（见下），其余技能与 16MB `screenshots/` 未搬 |
 | `guizang-social-card-skill/` | [op7418/guizang-social-card-skill](https://github.com/op7418/guizang-social-card-skill) @ `cf4b810` | 7.5k | AGPL-3.0 | 无（整仓约 4.4MB，全部保留） |
 | `documd-skills/` | [markdown-viewer/skills](https://github.com/markdown-viewer/skills) @ `2672b69` | 3.4k | CC-BY-4.0 | 无（整仓约 4.1MB，全部保留） |
 | `qiaomu-info-card-designer/` | [joeseesun/qiaomu-info-card-designer](https://github.com/joeseesun/qiaomu-info-card-designer) @ `0392968` | 272 | MIT | `assets/`（39MB：仓耳今楷 19MB + NotoSerifSC 15MB + profile 6MB） |
 
 ### baoyu-skills 保留的技能
 
-只搬了与「纯代码渲染」相关的 5 个，其余（`baoyu-xhs-images`、`baoyu-image-gen`、
-`baoyu-cover-image` 等）因为**依赖图像生成模型**而没有被采用：
+搬了 6 个技能。前 3 个是**纯代码渲染**（Run 1 直接用），后 3 个是**图像 API 链路**——
+它们在 Run 6 里被接上了本地生图服务：
 
-| 技能 | 作用 | 是否需要图像模型 |
+| 技能 | 作用 | 出图方式 |
 |---|---|---|
-| `baoyu-diagram` | 手写 SVG 图表（本次 Run 1 使用） | ❌ |
-| `baoyu-markdown-to-html` | Markdown → 带样式的 HTML（含 Mermaid 经 Chrome 转 PNG） | ❌ |
-| `baoyu-format-markdown` | Markdown 格式化 | ❌ |
-| `baoyu-infographic` | 信息图提示词/布局参考（供人参考设计模式） | ⚠️ 上游走图像模型 |
-| `baoyu-xhs-images` | 小红书图文参考（配色/版式规范） | ⚠️ 上游走图像模型 |
+| `baoyu-diagram` | 手写 SVG 图表（**Run 1** 使用） | 纯代码 |
+| `baoyu-markdown-to-html` | Markdown → 带样式的 HTML（含 Mermaid 经 Chrome 转 PNG） | 纯代码 |
+| `baoyu-format-markdown` | Markdown 格式化 | 纯代码 |
+| `baoyu-image-gen` | **统一图像生成后端**，支持 12 家 provider（**Run 6** 用它的 `--provider openai/google/dashscope`） | 图像 API → **已替换为本地渲染** |
+| `baoyu-infographic` | 信息图提示词 / 布局规范（9 种布局家族） | 图像 API（上游） |
+| `baoyu-xhs-images` | 小红书图文规范（10 套预设 + 3 套配色 + 元素库） | 图像 API（上游） |
+
+> `baoyu-xhs-images` / `baoyu-infographic` 的 SKILL.md 里有一条硬规则：
+> **禁止用 SVG/HTML 顶替光栅图**。所以 Run 6 的替换发生在**后端**（`localimage/`），
+> 而不是在技能层——技能代码一行未改。
 
 ### 关于缺失的大体积字体
 

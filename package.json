@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@markdown-viewer/documd": "^5.3.2",
+    "openai": "^7.32.0",
     "sharp": "^0.35.5"
   },
   "name": "ai-science-popularization-render-bench",
