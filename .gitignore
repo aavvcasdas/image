@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+
+# 各项目的构建产物 / 依赖（本仓库只 vendor 源码，跑法见 runs/*/run.mjs）
+projects/**/node_modules/
+projects/*/dist/
+projects/*/dist/**
+projects/MarkCardStudio/package-lock.json

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN" prefix="og: http://ogp.me/ns#">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XHS-TextCard | 开源小红书文字卡片生成器·Markdown 转图片</title>
+    <meta name="description" content="XHS-TextCard Open Source Edition 是一款纯前端、零后端的小红书文字卡片生成器。支持 Markdown 排版、智能分页、12 款大师级模板、本地 Canvas 渲染、品牌签名与防盗水印，一键导出 1242×1656 高清图片。官方在线版提供 AI 智能排版、飞书批量集成和 API 增强能力。">
+    <meta name="author" content="geekfoxcharlie">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://xhs-textcard.site/">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://xhs-textcard.site/">
+    <meta property="og:title" content="XHS-TextCard | 开源小红书文字卡片生成器">
+    <meta property="og:description" content="纯前端开源小红书文字卡片生成器，支持 Markdown 智能分页、12 款模板、本地 Canvas 渲染、品牌签名防盗水印。官方在线版提供 AI 智能排版增强能力。">
+    <meta property="og:site_name" content="XHS-TextCard">
+    <meta property="og:image" content="https://xhs-textcard.site/og-image.png">
+    <meta property="og:image:width" content="2400">
+    <meta property="og:image:height" content="1260">
+    <meta property="og:image:alt" content="XHS-TextCard 小红书文字卡片生成器界面预览">
+    <meta property="og:locale" content="zh_CN">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://xhs-textcard.site/">
+    <meta name="twitter:title" content="XHS-TextCard | 开源小红书文字卡片生成器">
+    <meta name="twitter:description" content="纯前端开源小红书文字卡片生成器，支持 Markdown 智能分页、12 款模板、本地 Canvas 渲染。官方在线版提供 AI 智能排版增强能力。">
+    <meta name="twitter:image" content="https://xhs-textcard.site/og-image.png">
+    <meta name="twitter:image:alt" content="XHS-TextCard 小红书文字卡片生成器界面预览">
+    <meta name="twitter:creator" content="@geekfoxcharlie">
+
+    <!-- Primary Schema: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "XHS-TextCard",
+      "alternateName": [
+        "小红书文字卡片生成器",
+        "小红书排版工具",
+        "XHS Card Generator",
+        "小红书 Markdown 转图片工具"
+      ],
+      "url": "https://xhs-textcard.site/",
+      "logo": "https://xhs-textcard.site/og-image.png",
+      "image": "https://xhs-textcard.site/og-image.png",
+      "screenshot": [
+        "https://xhs-textcard.site/assets/template-minimalist.png",
+        "https://xhs-textcard.site/assets/template-gradient.png",
+        "https://xhs-textcard.site/assets/template-dark.png"
+      ],
+      "description": "纯前端、零后端的开源小红书文字卡片生成器，支持 Markdown 智能分页、12 款大师级模板、本地 Canvas 渲染、品牌签名与防盗水印，一键将长文转化为 1242×1656 高清图片。官方在线版提供 AI 智能排版、飞书批量集成和 API 增强能力。",
+      "applicationCategory": "UtilityApplication",
+      "operatingSystem": "Any",
+      "browserRequirements": "Requires JavaScript. Requires HTML5 Canvas.",
+      "softwareVersion": "1.4.0",
+      "datePublished": "2024-01-01",
+      "dateModified": "2026-05-17",
+      "fileFormat": "text/html",
+      "featureList": [
+        "智能自动分页算法",
+        "Markdown 语法支持",
+        "12 款大师级设计模板",
+        "品牌签名与防盗水印",
+        "1242×1656 高清图片导出",
+        "纯本地运行零数据上传",
+        "实时预览编辑",
+        "官方在线版支持 AI 智能排版"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY",
+        "availability": "https://schema.org/InStock",
+        "priceValidUntil": "2099-12-31"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "ratingCount": "128",
+        "bestRating": "5",
+        "worstRating": "1"
+      },
+      "author": {
+        "@type": "Person",
+        "name": "geekfoxcharlie",
+        "url": "https://github.com/geekfoxcharlie"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "XHS-TextCard",
+        "url": "https://xhs-textcard.site/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://xhs-textcard.site/og-image.png",
+          "width": 2400,
+          "height": 1260
+        }
+      },
+      "copyrightHolder": {
+        "@type": "Person",
+        "name": "geekfoxcharlie"
+      },
+      "license": "https://github.com/geekfoxcharlie/XHS-TextCard/blob/main/LICENSE",
+      "codeRepository": "https://github.com/geekfoxcharlie/XHS-TextCard",
+      "sameAs": [
+        "https://github.com/geekfoxcharlie/XHS-TextCard",
+        "https://xhs-textcard.site/"
+      ],
+      "isBasedOn": "https://github.com/geekfoxcharlie/XHS-TextCard"
+    }
+    </script>
+
+    <!-- BreadcrumbList Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "首页",
+          "item": "https://xhs-textcard.site/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "编辑器",
+          "item": "https://xhs-textcard.site/editor.html"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "使用指南",
+          "item": "https://xhs-textcard.site/guide.html"
+        }
+      ]
+    }
+    </script>
+
+    <!-- FAQ Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "如何制作小红书文字卡片？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "在工作台输入文字并选择模板，系统会自动完成分页和排版，一键下载高清图片。支持 Markdown 语法，包括标题、加粗、高亮、列表等格式。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "XHS-TextCard 支持 Markdown 语法吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "完美支持标题、加粗、高亮、列表等 Markdown 语法，让文字更具表现力。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "生成的图片质量如何？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "默认生成 1242x1656 高清图片，适配小红书 3:4 黄金比例，文字清晰锐利，完美适配视网膜屏幕。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "文字太长会被截断吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不会。系统内置智能分页算法，当内容超过单页容量时，会自动按段落切分为多张连贯的卡片。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "XHS-TextCard 是否免费？有水印吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "开源版完全免费，保持纯前端和本地渲染。官方在线版提供 AI 智能排版、飞书批量集成和 API 等增强能力。"
+          }
+        }
+      ]
+    }
+    </script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/base/reset.css">
+    <link rel="stylesheet" href="css/base/variables.css">
+    <link rel="stylesheet" href="css/pages/index.css">
+    <link rel="icon" href="logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="logo.png">
+</head>
+
+<body>
+    <div id="landing-page" class="landing-page">
+        <div class="landing-content">
+            <nav class="landing-nav">
+                <div class="brand">
+                    <img src="logo.png" alt="XHS-TextCard" width="24" height="24">
+                    XHS-TextCard
+                </div>
+                <div class="nav-links">
+                    <a href="guide.html">
+                        <i class="fas fa-book"></i> 使用指南
+                    </a>
+                    <a href="format-demo.html">
+                        <i class="fas fa-star"></i> 排版示例
+                    </a>
+                    <a href="https://xhs-textcard.site/" target="_blank" rel="noopener">
+                        <i class="fas fa-wand-magic-sparkles"></i> 官方在线版
+                    </a>
+                    <a href="https://github.com/geekfoxcharlie/XHS-TextCard" target="_blank">
+                        <i class="fab fa-github"></i> GitHub
+                    </a>
+                    <span class="contact-item qr-trigger">
+                        <i class="fas fa-book-open"></i> 极客狐
+                        <div class="qr-popover">
+                            <img src="rednote.png" alt="极客狐小红书二维码 - 关注获取更多创作技巧">
+                            <p>扫码关注小红书</p>
+                        </div>
+                    </span>
+                </div>
+            </nav>
+            
+            <main class="hero-section">
+                <div class="hero-pill"><span class="hero-pill-dot"></span>Open Source Edition · 纯前端本地版</div>
+                <h1 class="hero-title"><span class="seo-visually-hidden">XHS-TextCard：开源小红书文字卡片生成器</span>释放文字的力量<br><span class="accent">让排版成为艺术</span></h1>
+                <p class="hero-subtitle">输入 Markdown，选择模板，浏览器本地 Canvas 一键生成 1242×1656 高清小红书文字卡片。无需后端，不上传内容。</p>
+                <div class="hero-actions">
+                    <a href="editor.html" class="btn-hero">
+                        打开本地编辑器
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                    <a href="https://xhs-textcard.site/" class="btn-secondary" target="_blank" rel="noopener">
+                        体验官方 AI 排版版
+                    </a>
+                </div>
+                <div class="ai-demo" aria-label="官方在线版 AI 智能排版示例">
+                    <div class="ai-demo-card">
+                        <div class="ai-demo-label">原始文字</div>
+                        <div class="ai-demo-content">今天试了一个新的护肤方法。其实以前一直乱抹，后来发现顺序太重要了。正确顺序是水乳乳液面霜。定期去角质也很关键，一周一次。坚持一个月后皮肤状态明显不一样了。希望对你们有帮助。</div>
+                    </div>
+                    <div class="ai-demo-arrow">
+                        <i class="fas fa-wand-magic-sparkles"></i>
+                        AI 排版
+                    </div>
+                    <div class="ai-demo-card">
+                        <div class="ai-demo-label">Markdown 结构</div>
+                        <div class="ai-demo-content">
+                            <p><strong># 护肤顺序错了？一个月变化超明显</strong></p>
+                            <p>以前一直乱抹，后来发现：<mark class="ai-demo-mark">顺序真的很重要</mark>。</p>
+                            <p><strong>## 正确步骤</strong></p>
+                            <ul>
+                                <li>水 → 乳 → 乳液 → 面霜</li>
+                                <li>去角质：一周 1 次</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- SEO Content Section -->
+            <section class="seo-content" style="max-width: 900px; margin: 3rem auto; padding: 0 1.5rem; text-align: center;">
+                <h2 style="font-size: 1.8rem; color: var(--landing-text-main); margin-bottom: 1.5rem; font-weight: 600;">为什么需要小红书文字卡片生成器？</h2>
+                <p style="color: var(--landing-text-secondary); line-height: 1.8; margin-bottom: 1.5rem; font-size: 0.95rem;">
+                    在小红书内容创作中，图文并茂的笔记往往能获得更高的曝光率和互动量。传统截图无法保证排版美观，复杂图像编辑软件又费时费力。<strong>XHS-TextCard 小红书文字卡片生成器</strong>是一款专为创作者打造的<strong>开源小红书文字卡片工具</strong>，让你无需设计基础，也能快速生成专业级文字卡片。
+                </p>
+                <p style="color: var(--landing-text-secondary); line-height: 1.8; margin-bottom: 1.5rem; font-size: 0.95rem;">
+                    开源版保持<strong>纯前端、零后端</strong>：文字处理、分页计算和图片渲染都在浏览器本地完成，适合处理私密草稿。官方在线版在此基础上提供 <a href="https://xhs-textcard.site/" target="_blank" rel="noopener">AI 智能排版</a>、飞书批量集成和 API 等云端增强能力。
+                </p>
+                <p style="color: var(--landing-text-secondary); line-height: 1.8; margin-bottom: 1.5rem; font-size: 0.95rem;">
+                    XHS-TextCard 支持<strong>小红书 Markdown 转图片</strong>，解析标题、加粗、高亮、引用、列表和图片等语法。配合智能分页算法，长文会自动拆分为多张 3:4 比例高清卡片（1242×1656px），并支持专属签名、防盗水印和模板级视觉定制。
+                </p>
+            </section>
+
+            <section class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-magic"></i></div>
+                    <h3>智能自动分页</h3>
+                    <p>自动拆分长文，智能掌控阅读节奏</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-palette"></i></div>
+                    <h3>大师级模板</h3>
+                    <p>内置专业设计，一键开启高级排版</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-fingerprint"></i></div>
+                    <h3>全方位定制</h3>
+                    <p>专属签名与水印，打造独特品牌 IP</p>
+                </div>
+            </section>
+
+            <section class="template-showcase" style="padding: 2rem 0; margin-top: 2rem;">
+                <div style="max-width: 1000px; margin: 0 auto;">
+                    <h2 style="text-align: center; margin-bottom: 1rem; color: var(--landing-text-main); font-size: 2rem; font-weight: 600;">12 款大师级小红书文字卡片模板，一键切换</h2>
+                    <p style="text-align:center; color: var(--landing-text-secondary); margin-bottom: 2.5rem; font-size: 0.95rem;">开源版内置多套模板，可本地调整字号、行距、背景、签名和水印。</p>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem;">
+                        <!-- 风格 1 -->
+                        <div style="background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 24px; overflow: hidden; border: 1px solid rgba(255,255,255,0.5); transition: transform 0.3s ease;">
+                            <div style="width: 100%; aspect-ratio: 3/4; overflow: hidden; background: #f5f7fa;">
+                                <img src="assets/template-minimalist.png" alt="小红书文字卡片生成器极简留白风格模板预览" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+                            </div>
+                            <div style="padding: 1.5rem;">
+                                <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--landing-text-main); font-weight: 600;">极简留白风格</h3>
+                                <p style="color: var(--landing-text-secondary); font-size: 0.9rem; line-height: 1.5;">适合情感语录、诗歌摘录。大面积留白给予呼吸感，突出文字本身的力量。</p>
+                            </div>
+                        </div>
+                        <!-- 风格 2 -->
+                        <div style="background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 24px; overflow: hidden; border: 1px solid rgba(255,255,255,0.5); transition: transform 0.3s ease;">
+                            <div style="width: 100%; aspect-ratio: 3/4; overflow: hidden; background: #a1c4fd;">
+                                <img src="assets/template-gradient.png" alt="小红书排版工具清新渐变风格模板预览" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+                            </div>
+                            <div style="padding: 1.5rem;">
+                                <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--landing-text-main); font-weight: 600;">清新渐变风格</h3>
+                                <p style="color: var(--landing-text-secondary); font-size: 0.9rem; line-height: 1.5;">适合干货分享、知识科普。柔和的背景色减少阅读疲劳，提升完读率。</p>
+                            </div>
+                        </div>
+                        <!-- 风格 3 -->
+                        <div style="background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 24px; overflow: hidden; border: 1px solid rgba(255,255,255,0.5); transition: transform 0.3s ease;">
+                            <div style="width: 100%; aspect-ratio: 3/4; overflow: hidden; background: #333;">
+                                <img src="assets/template-dark.png" alt="小红书 Markdown 转图片暗黑沉浸风格模板预览" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+                            </div>
+                            <div style="padding: 1.5rem;">
+                                <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--landing-text-main); font-weight: 600;">暗黑沉浸风格</h3>
+                                <p style="color: var(--landing-text-secondary); font-size: 0.9rem; line-height: 1.5;">适合深度思考、夜读内容。高对比度设计，让文字在深色背景中熠熠生辉。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 3rem;">
+                        <a href="editor.html" class="btn-hero" style="text-decoration: none; font-size: 1rem; padding: 12px 32px; background: rgba(29, 29, 31, 0.8);">打开编辑器浏览全部模板</a>
+                    </div>
+                </div>
+            </section>
+
+            <section class="official-note" aria-label="官方在线版说明">
+                <h2 style="font-size: 1.8rem; margin-bottom: 0.5rem;">需要一键 AI 排版？使用官方在线版</h2>
+                <p>本仓库是纯前端开源本地版，不包含后端和账号系统。XHS-TextCard 官方在线版提供 AI 智能排版、飞书多维表格批量流程和 API 增强能力。</p>
+                <a href="https://xhs-textcard.site/" target="_blank" rel="noopener">访问官方在线版 https://xhs-textcard.site/</a>
+            </section>
+
+            <!-- Technical Context (Re-positioned & Styled for Blend-in) -->
+            <section class="ai-context" aria-label="核心技术" style="margin: 4rem auto; max-width: 800px; text-align: center;">
+                <h3 style="font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--landing-text-main); font-weight: 600;">为什么选择 XHS-TextCard？</h3>
+                <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 2rem;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--landing-accent);">⚡️</div>
+                        <h4 style="font-weight: 600; margin-bottom: 0.5rem;">智能分页算法</h4>
+                        <p style="font-size: 0.9rem; color: var(--landing-text-secondary);">自动识别段落与标点，长文自动拆分为多张连贯卡片。</p>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--landing-accent);">💎</div>
+                        <h4 style="font-weight: 600; margin-bottom: 0.5rem;">无损矢量渲染</h4>
+                        <p style="font-size: 0.9rem; color: var(--landing-text-secondary);">基于 Canvas 技术，输出 1242x1656px 视网膜级高清 PNG。</p>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--landing-accent);">🔒</div>
+                        <h4 style="font-weight: 600; margin-bottom: 0.5rem;">零后端隐私保护</h4>
+                        <p style="font-size: 0.9rem; color: var(--landing-text-secondary);">所有数据均在浏览器本地处理，即用即走，安全无忧。</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="faq-section" style="margin-top: 4rem; padding-bottom: 4rem; max-width: 1000px; margin-left: auto; margin-right: auto;">
+                <h2 style="text-align: center; margin-bottom: 3rem; color: var(--landing-text-main); font-size: 2rem; font-weight: 600;">小红书排版工具常见问题</h2>
+                <div class="faq-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 3rem; padding: 0 1rem;">
+                    <div class="faq-item">
+                        <h4 style="margin-bottom: 0.8rem; color: var(--landing-text-main); font-weight: 600;">如何制作小红书文字卡片？</h4>
+                        <p style="font-size: 0.95rem; line-height: 1.6; color: var(--landing-text-secondary);">在工作台输入文字并选择模板，系统会自动完成分页和排版，一键下载高清图片。</p>
+                    </div>
+                    <div class="faq-item">
+                        <h4 style="margin-bottom: 0.8rem; color: var(--landing-text-main); font-weight: 600;">支持 Markdown 语法吗？</h4>
+                        <p style="font-size: 0.95rem; line-height: 1.6; color: var(--landing-text-secondary);">完美支持标题、加粗、高亮、列表等 Markdown 语法，让文字更具表现力。</p>
+                    </div>
+                    <div class="faq-item">
+                        <h4 style="margin-bottom: 0.8rem; color: var(--landing-text-main); font-weight: 600;">生成的图片质量如何？</h4>
+                        <p style="font-size: 0.95rem; line-height: 1.6; color: var(--landing-text-secondary);">默认生成 1242x1656 高清图片，适配小红书 3:4 黄金比例，文字清晰锐利。</p>
+                    </div>
+                    <div class="faq-item">
+                        <h4 style="margin-bottom: 0.8rem; color: var(--landing-text-main); font-weight: 600;">文字太长会被截断吗？</h4>
+                        <p style="font-size: 0.95rem; line-height: 1.6; color: var(--landing-text-secondary);">不会。系统内置智能分页算法，当内容超过单页容量时，会自动按段落切分为多张连贯的卡片。</p>
+                    </div>
+                    <div class="faq-item">
+                        <h4 style="margin-bottom: 0.8rem; color: var(--landing-text-main); font-weight: 600;">是否免费？有水印吗？</h4>
+                        <p style="font-size: 0.95rem; line-height: 1.6; color: var(--landing-text-secondary);">开源版完全免费并保持纯前端。需要 AI 智能排版、飞书批量流程或 API 时，可使用官方在线版。</p>
+                    </div>
+                </div>
+            </section>
+
+            <footer style="text-align: center; padding: 2rem; border-top: 1px solid rgba(0,0,0,0.05); margin-top: 2rem; color: var(--color-text-secondary); font-size: 0.9rem;">
+                <p style="margin-bottom: 0.5rem;"><a href="editor.html" style="color:inherit;">编辑器</a> · <a href="guide.html" style="color:inherit;">使用指南</a> · <a href="format-demo.html" style="color:inherit;">排版示例</a> · <a href="https://xhs-textcard.site/" target="_blank" rel="noopener" style="color:inherit;">官方在线版</a></p>
+                <p>&copy; 2026 XHS-TextCard Open Source Edition | Original project: <a href="https://github.com/geekfoxcharlie/XHS-TextCard" target="_blank" rel="noopener" style="color:inherit;">geekfoxcharlie/XHS-TextCard</a></p>
+            </footer>
+        </div>
+        <div class="landing-bg">
+            <div class="blob blob-1"></div>
+            <div class="blob blob-2"></div>
+        </div>
+    </div>
+</body>
+</html>

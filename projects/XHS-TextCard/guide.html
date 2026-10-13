@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>使用指南 | XHS-TextCard 开源本地版</title>
+    <meta name="description" content="XHS-TextCard 开源本地版使用指南：学习 Markdown 语法、智能分页、模板选择、品牌签名、水印和 1242×1656 高清图片导出。官方在线版提供 AI 智能排版等增强能力。">
+    <meta name="author" content="geekfoxcharlie">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://xhs-textcard.site/guide.html">
+    <link rel="icon" href="logo.png" type="image/png">
+    <style>
+        :root {
+            --bg: #f8f9fb;
+            --card: #ffffff;
+            --border: #e5e7eb;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --primary: #2563eb;
+            --primary-soft: #eff6ff;
+            --code-bg: #f3f4f6;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.75;
+        }
+
+        .page-header {
+            background: rgba(255, 255, 255, 0.86);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            backdrop-filter: blur(16px);
+            z-index: 10;
+        }
+
+        .page-header-inner {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .brand img { width: 22px; height: 22px; }
+
+        .header-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            font-size: 14px;
+        }
+
+        a { color: var(--primary); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .container {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 44px 24px 72px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #ffffff 0%, #f4f7ff 100%);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 36px;
+            margin-bottom: 28px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            padding: 5px 12px;
+            border-radius: 999px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 14px;
+        }
+
+        h1 { font-size: clamp(28px, 5vw, 42px); line-height: 1.18; margin-bottom: 12px; letter-spacing: -0.04em; }
+        h2 { font-size: 22px; margin: 34px 0 14px; padding-top: 4px; }
+        h3 { font-size: 17px; margin: 22px 0 8px; }
+        p { color: var(--muted); margin: 8px 0; }
+        ul, ol { padding-left: 22px; color: var(--muted); }
+        li { margin: 5px 0; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            margin: 18px 0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 14px;
+            margin: 18px 0;
+        }
+
+        .tile {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+        }
+
+        .tile strong { display: block; color: var(--text); margin-bottom: 4px; }
+
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background: var(--code-bg);
+            color: #111827;
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-size: 0.92em;
+        }
+
+        pre {
+            background: #111827;
+            color: #e5e7eb;
+            border-radius: 14px;
+            padding: 18px;
+            overflow-x: auto;
+            margin: 14px 0;
+            line-height: 1.65;
+        }
+
+        pre code { background: transparent; color: inherit; padding: 0; }
+
+        .note {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #92400e;
+            border-radius: 16px;
+            padding: 16px 18px;
+            margin: 18px 0;
+        }
+
+        .official {
+            background: #ecfdf5;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+            border-radius: 16px;
+            padding: 16px 18px;
+            margin: 18px 0;
+        }
+
+        .official a { color: #047857; font-weight: 700; }
+
+        .footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        @media (max-width: 640px) {
+            .page-header-inner { align-items: flex-start; flex-direction: column; }
+            .hero { padding: 26px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="page-header">
+        <div class="page-header-inner">
+            <a class="brand" href="index.html"><img src="logo.png" alt="XHS-TextCard"> XHS-TextCard</a>
+            <nav class="header-links" aria-label="页面导航">
+                <a href="editor.html">打开编辑器</a>
+                <a href="format-demo.html">排版示例</a>
+                <a href="https://xhs-textcard.site/" target="_blank" rel="noopener">官方在线版</a>
+                <a href="https://github.com/geekfoxcharlie/XHS-TextCard" target="_blank" rel="noopener">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <span class="eyebrow">Open Source Edition · 纯前端本地版</span>
+            <h1>XHS-TextCard 使用指南</h1>
+            <p>XHS-TextCard 开源版不需要登录、不需要后端、不上传内容。你只需要输入 Markdown，选择模板，浏览器会在本地 Canvas 中渲染并导出 1242×1656 高清图片。</p>
+            <p>如果你希望把无格式原文一键整理成小红书风格 Markdown，可使用 <a href="https://xhs-textcard.site/" target="_blank" rel="noopener">XHS-TextCard 官方在线版</a> 的 AI 智能排版能力。</p>
+        </section>
+
+        <section class="grid" aria-label="核心能力">
+            <div class="tile"><strong>本地渲染</strong><p>所有排版和导出都在浏览器完成，适合处理私密草稿。</p></div>
+            <div class="tile"><strong>Markdown 排版</strong><p>支持标题、加粗、高亮、引用、列表、图片和强制分页。</p></div>
+            <div class="tile"><strong>模板定制</strong><p>可调整字号、行高、颜色、内边距、签名和水印。</p></div>
+        </section>
+
+        <h2>1. 快速开始</h2>
+        <div class="card">
+            <ol>
+                <li>打开 <a href="editor.html">editor.html</a>。</li>
+                <li>在左侧输入或粘贴 Markdown 文本。</li>
+                <li>在右侧选择模板，并按需调整字号、颜色、行高、签名和水印。</li>
+                <li>确认预览无误后，点击「打包下载全部图片」。</li>
+            </ol>
+        </div>
+
+        <h2>2. 常用 Markdown 语法</h2>
+        <pre><code># 一级标题
+## 二级标题
+
+这是一段正文，支持 **加粗**、==高亮==、*斜体*、~~删除线~~ 和 `行内代码`。
+
+> 这是一段引用，适合金句、摘录和重点提示。
+
+- 无序列表
+- 继续列出观点
+
+1. 有序步骤
+2. 第二个步骤
+
+---
+
+上面的三个短横线会强制开启新页面。</code></pre>
+
+        <div class="note">
+            <strong>分页建议：</strong>长文尽量用空行分隔段落。系统会优先在段落之间分页，阅读节奏会比连续大段文字更自然。
+        </div>
+
+        <h2>3. 模板选择建议</h2>
+        <div class="grid">
+            <div class="tile"><strong>极简杂志</strong><p>适合观点文、知识总结、轻商业内容。</p></div>
+            <div class="tile"><strong>书籍内页</strong><p>适合摘录、读书笔记、深度长文。</p></div>
+            <div class="tile"><strong>大厂文档</strong><p>适合职场方法论、商业分析、教程。</p></div>
+            <div class="tile"><strong>暗夜深思</strong><p>适合科技、开发者、深夜思考类内容。</p></div>
+            <div class="tile"><strong>复古拍立得</strong><p>适合旅行、生活记录、情绪化表达。</p></div>
+            <div class="tile"><strong>空白模板</strong><p>适合从零开始做个人品牌统一视觉。</p></div>
+        </div>
+
+        <h2>4. 开源版与官方在线版</h2>
+        <div class="card">
+            <p><strong>开源本地版：</strong>纯 HTML/CSS/JavaScript，无后端、无构建流程，专注手写 Markdown、本地渲染和图片导出。</p>
+            <p><strong>官方在线版：</strong>在本地渲染能力之上，提供 AI 智能排版、飞书多维表格批量流程、API 调用等云端增强能力。</p>
+        </div>
+
+        <div class="official">
+            官方在线版地址：<a href="https://xhs-textcard.site/" target="_blank" rel="noopener">https://xhs-textcard.site/</a>。如果你只需要本地 Markdown 转图片，当前开源版已经足够；如果你需要一键把原始文案整理成爆款结构，再使用官方在线增强能力。
+        </div>
+
+        <footer class="footer">
+            <p>XHS-TextCard Open Source Edition · Original project: <a href="https://github.com/geekfoxcharlie/XHS-TextCard" target="_blank" rel="noopener">github.com/geekfoxcharlie/XHS-TextCard</a></p>
+            <p>Official hosted version: <a href="https://xhs-textcard.site/" target="_blank" rel="noopener">xhs-textcard.site</a></p>
+        </footer>
+    </main>
+</body>
+</html>

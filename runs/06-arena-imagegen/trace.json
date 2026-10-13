@@ -1,0 +1,37 @@
+{
+  "chain": [
+    "文案：projects/ah-xhs-cover-title（85 条爆款公式库）路由 → 标题 + 封面三行",
+    "画面提示词：projects/qiaomu-codex-imagegen（24 模板 / 48 预设）compose",
+    "出图：Arena 生图（替代原技能的 Codex 生图 / 任何图像 API）",
+    "合成：HTML/CSS 文字层 + Chromium 截图（本脚本）"
+  ],
+  "cards": [
+    {
+      "file": "runs/06-arena-imagegen/out/01-di-gu-period.png",
+      "bytes": 1464666,
+      "w": 1242,
+      "h": 1656,
+      "base": "runs/06-arena-imagegen/assets/01-light-gap.png",
+      "styleTemplate": "T03-1 中央光隙 · 清润春生",
+      "hook": "G情绪钩子 + 6心态情绪"
+    },
+    {
+      "file": "runs/06-arena-imagegen/out/02-grow-slowly.png",
+      "bytes": 983823,
+      "w": 1242,
+      "h": 1656,
+      "base": "runs/06-arena-imagegen/assets/02-paper-terrace.png",
+      "styleTemplate": "T05-1 纸雕田垄",
+      "hook": "B顿悟发现 + 2自我成长"
+    },
+    {
+      "file": "runs/06-arena-imagegen/out/03-alone-is-fine.png",
+      "bytes": 1029671,
+      "w": 1242,
+      "h": 1656,
+      "base": "runs/06-arena-imagegen/assets/03-window-flowers.png",
+      "styleTemplate": "T08-2 旅行手账",
+      "hook": "A建议祈使 + 4人际关系"
+    }
+  ]
+}
