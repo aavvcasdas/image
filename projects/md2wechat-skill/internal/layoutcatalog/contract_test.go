@@ -1,0 +1,1652 @@
+package layoutcatalog
+
+import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"os"
+	"reflect"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/geekjourneyx/md2wechat-skill/internal/assets"
+	"gopkg.in/yaml.v3"
+)
+
+type upstreamAgentContractOracle struct {
+	SourceCommit string                  `yaml:"source_commit"`
+	SourceFile   string                  `yaml:"source_file"`
+	SourceSHA256 string                  `yaml:"source_sha256"`
+	Contracts    []upstreamAgentContract `yaml:"contracts"`
+}
+
+type upstreamAgentContract struct {
+	Syntax   string              `yaml:"syntax"`
+	Input    []string            `yaml:"input"`
+	Required []string            `yaml:"required"`
+	Optional []string            `yaml:"optional"`
+	Enums    map[string][]string `yaml:"enums"`
+	Defaults map[string]string   `yaml:"defaults"`
+	Invalid  []string            `yaml:"invalid"`
+	Ignored  []string            `yaml:"ignored"`
+	Legacy   []string            `yaml:"legacy"`
+}
+
+type upstreamAgentContractProjectionOracle struct {
+	SourceCommit string                            `yaml:"source_commit"`
+	SourceFiles  []string                          `yaml:"source_files"`
+	Projections  []upstreamAgentContractProjection `yaml:"projections"`
+}
+
+type upstreamAgentContractProjection struct {
+	Syntax        string              `yaml:"syntax"`
+	BodyFormat    string              `yaml:"body_format"`
+	Applicability map[string][]string `yaml:"applicability"`
+}
+
+const upstreamAgentContractContentSHA256 = "730048f5e1038616ae5254d1d135ae483cdeb9bb47bfeb6a783bfa3bd5b99c41"
+const upstreamAgentContractProjectionSHA256 = "7c36bbbf540eb1a7b2f13f31c5c382513431d5e6c9418c22d72dc21642db4c5c"
+
+func TestUpstreamAgentContractProjectionOracle(t *testing.T) {
+	data, err := os.ReadFile("testdata/upstream_agent_contract_projections.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oracle upstreamAgentContractProjectionOracle
+	if err := yaml.Unmarshal(data, &oracle); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("%x", sha256.Sum256(data)); got != upstreamAgentContractProjectionSHA256 {
+		t.Fatalf("projection fixture digest = %q, want %q", got, upstreamAgentContractProjectionSHA256)
+	}
+	if oracle.SourceCommit != "2795cf552383fa6883733b7dec56dc7b3bda8aa1" {
+		t.Fatalf("upstream source commit = %q", oracle.SourceCommit)
+	}
+	if want := []string{"__tests__/fixtures/advanced-layout-agent-contract.ts", "docs/advanced-layout-modules-guide.md"}; !slices.Equal(oracle.SourceFiles, want) {
+		t.Fatalf("projection source files = %v, want %v", oracle.SourceFiles, want)
+	}
+	if len(oracle.Projections) != 59 {
+		t.Fatalf("projection count = %d, want 59", len(oracle.Projections))
+	}
+	seen := make(map[string]bool, len(oracle.Projections))
+	for _, projection := range oracle.Projections {
+		if projection.Syntax == "" || seen[projection.Syntax] {
+			t.Fatalf("invalid duplicate projection syntax %q", projection.Syntax)
+		}
+		seen[projection.Syntax] = true
+		if !ValidBodyFormats[projection.BodyFormat] || projection.Applicability == nil {
+			t.Fatalf("projection %q has invalid body format/applicability", projection.Syntax)
+		}
+	}
+	want := slices.Clone(recommendedModuleNames)
+	slices.Sort(want)
+	got := make([]string, 0, len(seen))
+	for syntax := range seen {
+		got = append(got, syntax)
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("projection syntax names = %v, want %v", got, want)
+	}
+}
+
+func TestUpstreamAgentContractOracle(t *testing.T) {
+	oracle := readUpstreamAgentContracts(t)
+	if oracle.SourceCommit != "2795cf552383fa6883733b7dec56dc7b3bda8aa1" {
+		t.Fatalf("upstream source commit = %q", oracle.SourceCommit)
+	}
+	if oracle.SourceFile != "__tests__/fixtures/advanced-layout-agent-contract.ts" {
+		t.Fatalf("upstream source file = %q", oracle.SourceFile)
+	}
+	if oracle.SourceSHA256 != "984d557651625ceac5b6aed60a373b541777d0e2a8a792fc3cf4812728d6b30b" {
+		t.Fatalf("upstream source digest = %q", oracle.SourceSHA256)
+	}
+	if len(oracle.Contracts) != 59 {
+		t.Fatalf("contract count = %d, want 59", len(oracle.Contracts))
+	}
+
+	seen := make(map[string]bool, len(oracle.Contracts))
+	got := make([]string, 0, len(oracle.Contracts))
+	for _, contract := range oracle.Contracts {
+		if contract.Syntax == "" || seen[contract.Syntax] {
+			t.Fatalf("invalid duplicate syntax %q", contract.Syntax)
+		}
+		seen[contract.Syntax] = true
+		got = append(got, contract.Syntax)
+	}
+	want := slices.Clone(recommendedModuleNames)
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("contract syntax names = %v, want %v", got, want)
+	}
+}
+
+func TestUpstreamAgentContractOracleContentIntegrity(t *testing.T) {
+	oracle := readUpstreamAgentContracts(t)
+	for i, contract := range oracle.Contracts {
+		if contract.Syntax == "" {
+			t.Fatalf("contract %d has no syntax", i)
+		}
+		if contract.Input == nil || contract.Required == nil || contract.Optional == nil {
+			t.Fatalf("contract %q omits an input/required/optional list", contract.Syntax)
+		}
+		if contract.Enums == nil || contract.Defaults == nil {
+			t.Fatalf("contract %q omits an enums/defaults map", contract.Syntax)
+		}
+		if contract.Invalid == nil || contract.Ignored == nil || contract.Legacy == nil {
+			t.Fatalf("contract %q omits an invalid/ignored/legacy list", contract.Syntax)
+		}
+		for field, values := range contract.Enums {
+			if values == nil {
+				t.Fatalf("contract %q enum %q omits its value list", contract.Syntax, field)
+			}
+		}
+	}
+
+	encoded, err := json.Marshal(oracle.Contracts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := fmt.Sprintf("%x", sha256.Sum256(encoded))
+	if got != upstreamAgentContractContentSHA256 {
+		t.Fatalf("normalized contract digest = %q, want %q", got, upstreamAgentContractContentSHA256)
+	}
+}
+
+func TestUpstreamAgentContractsUseSupportedInputPositions(t *testing.T) {
+	oracle := readUpstreamAgentContracts(t)
+	for _, contract := range oracle.Contracts {
+		for _, input := range contract.Input {
+			if !ValidAgentInputPositions[AgentInputPosition(input)] {
+				t.Fatalf("contract %q input position %q is not supported by schema-v1", contract.Syntax, input)
+			}
+		}
+	}
+}
+
+// TestBuiltinCatalogMatchesUpstreamAgentContracts keeps the author-facing
+// contract in the builtin catalog aligned with the pinned upstream oracle.
+// The upstream fields and ordered values are compared exactly. Canonical body
+// format and branch applicability are checked against their generic runtime
+// schema declarations; compatible parsing stays outside this authoring view.
+func TestBuiltinCatalogMatchesUpstreamAgentContracts(t *testing.T) {
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	projections := pinnedAgentContractProjectionsBySyntax(t)
+	for _, want := range readUpstreamAgentContracts(t).Contracts {
+		want := want
+		t.Run(want.Syntax, func(t *testing.T) {
+			spec, ok := c.Get(want.Syntax)
+			if !ok {
+				t.Fatal("missing recommended catalog entry")
+			}
+			got := projectAgentContract(spec)
+			projection, ok := projections[want.Syntax]
+			if !ok {
+				t.Fatal("missing pinned body-format/applicability projection")
+			}
+			expected := expectedAgentContract(want, projection.BodyFormat, projection.Applicability)
+			if diff := compareAgentContracts(got, expected); len(diff) != 0 {
+				t.Errorf("agent contract differs in %v\n got: %#v\nwant: %#v", diff, got, expected)
+			}
+		})
+	}
+}
+
+// TestBuiltinPublicCanonicalSchemaMatchesUpstream proves that layout show's
+// author-facing schema matches the pinned upstream contract. AgentContract is
+// intentionally excluded: it is audit metadata, not public discovery.
+func TestBuiltinPublicCanonicalSchemaMatchesUpstream(t *testing.T) {
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	projections := pinnedAgentContractProjectionsBySyntax(t)
+	for _, want := range readUpstreamAgentContracts(t).Contracts {
+		spec, ok := c.Get(want.Syntax)
+		if !ok {
+			t.Errorf("%s: missing recommended catalog entry", want.Syntax)
+			continue
+		}
+		spec = publicLayoutShowSpec(t, spec)
+		projection, ok := projections[want.Syntax]
+		if !ok {
+			t.Errorf("%s: missing pinned public projection", want.Syntax)
+			continue
+		}
+		if spec.BodyFormat != projection.BodyFormat {
+			t.Errorf("%s: public body_format = %q, want %q", want.Syntax, spec.BodyFormat, projection.BodyFormat)
+		}
+		var positions []string
+		for _, position := range spec.InputPositions {
+			positions = append(positions, string(position))
+		}
+		if !slices.Equal(positions, want.Input) {
+			t.Errorf("%s: public input_positions = %v, want %v", want.Syntax, positions, want.Input)
+		}
+		got := publicCanonicalControls(spec, want)
+		for name, control := range got {
+			membership := ""
+			if slices.Contains(want.Required, name) {
+				membership = "required"
+			} else if slices.Contains(want.Optional, name) {
+				membership = "optional"
+			}
+			if membership == "" {
+				t.Errorf("%s: public %s control %q is absent from upstream required/optional", want.Syntax, control.Location, name)
+				continue
+			}
+			if control.Membership != membership {
+				t.Errorf("%s: public %s control %q is %s, want %s", want.Syntax, control.Location, name, control.Membership, membership)
+			}
+			if enum := want.Enums[name]; !slices.Equal(control.Enum, enum) {
+				t.Errorf("%s: public %s enum %q = %v, want %v", want.Syntax, control.Location, name, control.Enum, enum)
+			}
+			if value, exists := want.Defaults[name]; exists {
+				if abstractSemanticDefault(name, value) {
+					if control.Default != "" {
+						t.Errorf("%s: public %s default %q = %q, but upstream default is semantic", want.Syntax, control.Location, name, control.Default)
+					}
+				} else if control.Default != value {
+					t.Errorf("%s: public %s default %q = %q, want %q", want.Syntax, control.Location, name, control.Default, value)
+				}
+			} else if control.Default != "" {
+				t.Errorf("%s: public %s default %q = %q, absent upstream", want.Syntax, control.Location, name, control.Default)
+			}
+			if applies := projection.Applicability[name]; !slices.Equal(control.AppliesTo, applies) {
+				t.Errorf("%s: public %s applicability %q = %v, want %v", want.Syntax, control.Location, name, control.AppliesTo, applies)
+			}
+		}
+		for _, name := range append(slices.Clone(want.Required), want.Optional...) {
+			if directlyRepresentableContractControl(spec, want, name) {
+				if _, ok := got[name]; !ok {
+					t.Errorf("%s: directly representable upstream control %q is missing from public canonical schema", want.Syntax, name)
+				}
+			}
+		}
+		comparePublicStructuralRequirements(t, spec, want)
+		comparePublicDefaults(t, spec, want, got)
+	}
+}
+
+func publicLayoutShowSpec(t *testing.T, spec *LayoutSpec) *LayoutSpec {
+	t.Helper()
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("%s: marshal public layout show spec: %v", spec.Name, err)
+	}
+	var public LayoutSpec
+	if err := json.Unmarshal(encoded, &public); err != nil {
+		t.Fatalf("%s: unmarshal public layout show spec: %v", spec.Name, err)
+	}
+	if public.AgentContract != nil {
+		t.Fatalf("%s: public layout show leaks hidden agent_contract", spec.Name)
+	}
+	return &public
+}
+
+type publicCanonicalControl struct {
+	Location, Membership string
+	Enum                 []string
+	Default              string
+	AppliesTo            []string
+}
+
+func publicCanonicalControls(spec *LayoutSpec, want upstreamAgentContract) map[string]publicCanonicalControl {
+	got := map[string]publicCanonicalControl{}
+	if formatSupportsDeclaredFields(spec.BodyFormat) && spec.Fields != nil && !spec.FieldsCompatibilityOnly {
+		for _, field := range spec.Fields.Required {
+			got[field.Name] = publicCanonicalControl{"Fields.Required", "required", field.Enum, field.Default, field.AppliesTo}
+		}
+		for _, field := range spec.Fields.Optional {
+			got[field.Name] = publicCanonicalControl{"Fields.Optional", "optional", field.Enum, field.Default, field.AppliesTo}
+		}
+	}
+	if spec.BodyFormat == BodyFormatRows && spec.Rows != nil && !spec.RowsCompatibilityOnly && !slices.Contains(want.Required, "rows") {
+		for i, field := range spec.Rows.Schema {
+			membership := "optional"
+			if i < spec.Rows.MinColumns {
+				membership = "required"
+			}
+			got[field.Name] = publicCanonicalControl{"Rows.Schema", membership, field.Enum, field.Default, field.AppliesTo}
+		}
+	}
+	if spec.Opener != nil && !spec.OpenerCompatibilityOnly {
+		if spec.Opener.Caption {
+			got["header-title"] = publicCanonicalControl{Location: "Opener.Caption", Membership: "optional", Default: spec.Opener.CaptionDefault}
+		}
+		for _, param := range spec.Opener.Params {
+			membership := "optional"
+			if param.Required {
+				membership = "required"
+			}
+			got[param.Name] = publicCanonicalControl{"Opener.Params", membership, param.Enum, param.Default, nil}
+		}
+	}
+	return got
+}
+
+func directlyRepresentableContractControl(spec *LayoutSpec, want upstreamAgentContract, name string) bool {
+	if name == "header-title" {
+		return true
+	}
+	if abstractSemanticRequirement(want.Syntax, name) {
+		return false
+	}
+	for _, input := range want.Input {
+		switch AgentInputPosition(input) {
+		case InputBodyKV, InputJSON:
+			return !strings.Contains(name, "-or-")
+		case InputHeaderAttrs:
+			if spec.Opener != nil {
+				for _, param := range spec.Opener.Params {
+					if param.Name == name {
+						return true
+					}
+				}
+			}
+		}
+	}
+	if spec.BodyFormat == BodyFormatRows && name != "rows" && name != "headers" {
+		return true
+	}
+	if spec.BodyFormat == BodyFormatMarkdownFields && name != "image" {
+		return true
+	}
+	return false
+}
+
+func abstractSemanticRequirement(syntax, name string) bool {
+	if syntax == "expand" && (name == "markdown-body" || name == "separator") {
+		return true
+	}
+	if name == "image" || name == "fit-or-avoid" || name == "title-or-body-or-next" ||
+		name == "title-or-body" || name == "left-body" || name == "right-body" ||
+		name == "nodes" || name == "rows" || name == "Q" || name == "A" ||
+		name == "U-or-E" || name == "nonempty-category" || strings.Contains(name, ".") {
+		return true
+	}
+	return syntax == "gallery-story" && (name == "title" || name == "body")
+}
+
+func abstractSemanticDefault(name, value string) bool {
+	return name == "link" && value == "plain-text" || name == "icon" && value == "uppercase-first-character"
+}
+
+func comparePublicStructuralRequirements(t *testing.T, spec *LayoutSpec, want upstreamAgentContract) {
+	t.Helper()
+	requireGroup := func(name string, group []string) {
+		if !slices.Contains(want.Required, name) || spec.Fields == nil {
+			return
+		}
+		for _, got := range spec.Fields.RequiredAny {
+			if slices.Equal(got, group) {
+				return
+			}
+		}
+		t.Errorf("%s: abstract required control %q is not represented by Fields.RequiredAny %v", want.Syntax, name, group)
+	}
+	requireGroup("fit-or-avoid", []string{"fit", "avoid"})
+	requireGroup("title-or-body-or-next", []string{"title", "body", "next"})
+	requireGroup("title-or-body", []string{"title", "body"})
+	controls := publicCanonicalControls(spec, want)
+	if slices.Contains(want.Required, "image") && controls["image"].Location == "" && (spec.Body == nil || spec.Body.MinImages < 1) {
+		t.Errorf("%s: abstract required image is not represented by Body.MinImages", want.Syntax)
+	}
+	if slices.Contains(want.Required, "nodes") && (spec.Body == nil || spec.Body.MinItems < 1) {
+		t.Errorf("%s: abstract required nodes are not represented by Body.MinItems", want.Syntax)
+	}
+	if (slices.Contains(want.Required, "Q") || slices.Contains(want.Required, "A")) &&
+		(spec.Body == nil || !slices.Contains(spec.Body.RequiredPairs, [2]string{"Q", "A"})) {
+		t.Errorf("%s: abstract Q/A requirement is not represented by Body.RequiredPairs", want.Syntax)
+	}
+	if controls["left-body"].Location == "" && controls["right-body"].Location == "" &&
+		(slices.Contains(want.Required, "left-body") || slices.Contains(want.Required, "right-body")) &&
+		(spec.BodyFormat != BodyFormatSplit || spec.Body == nil || spec.Body.Separator == "" || spec.Body.MinItems < 2) {
+		t.Errorf("%s: abstract split-body requirements are not represented by Body", want.Syntax)
+	}
+	if slices.Contains(want.Required, "rows") && (spec.Rows == nil || spec.Rows.MinColumns < 1 || len(spec.Rows.Schema) < spec.Rows.MinColumns) {
+		t.Errorf("%s: abstract rows requirement is not represented by Rows", want.Syntax)
+	}
+	if slices.Contains(want.Required, "U-or-E") && (spec.Body == nil || spec.Body.MinItems < 1 ||
+		!slices.Contains(spec.Body.AllowedPrefixes, "U:") || !slices.Contains(spec.Body.AllowedPrefixes, "E:")) {
+		t.Errorf("%s: abstract U-or-E requirement is not represented by Body", want.Syntax)
+	}
+	if slices.Contains(want.Required, "nonempty-category") && (spec.Fields == nil || len(spec.Fields.RequiredAny) == 0) {
+		t.Errorf("%s: abstract nonempty-category requirement is not represented by Fields.RequiredAny", want.Syntax)
+	}
+	for _, name := range want.Required {
+		if directlyRepresentableContractControl(spec, want, name) || abstractRequirementRepresented(spec, want, name, controls) {
+			continue
+		}
+		t.Errorf("%s: upstream abstract requirement %q has no explicit structural or audit-only classification", want.Syntax, name)
+	}
+}
+
+func abstractRequirementRepresented(spec *LayoutSpec, want upstreamAgentContract, name string, controls map[string]publicCanonicalControl) bool {
+	if controls[name].Location != "" {
+		return true
+	}
+	switch name {
+	case "fit-or-avoid":
+		return hasRequiredAny(spec.Fields, []string{"fit", "avoid"})
+	case "title-or-body-or-next":
+		return hasRequiredAny(spec.Fields, []string{"title", "body", "next"})
+	case "title-or-body":
+		return hasRequiredAny(spec.Fields, []string{"title", "body"})
+	case "image":
+		return spec.Body != nil && spec.Body.MinImages > 0
+	case "left-body", "right-body":
+		return spec.BodyFormat == BodyFormatSplit && spec.Body != nil && spec.Body.Separator != "" && spec.Body.MinItems >= 2
+	case "markdown-body", "separator":
+		return want.Syntax == "expand" && spec.BodyFormat == BodyFormatFieldsMarkdown && spec.Body != nil && spec.Body.Separator == "---" && spec.Body.MinItems >= 1
+	case "nodes":
+		return spec.Body != nil && spec.Body.MinItems > 0
+	case "rows":
+		return spec.Rows != nil && spec.Rows.MinColumns > 0
+	case "Q", "A":
+		return spec.Body != nil && slices.Contains(spec.Body.RequiredPairs, [2]string{"Q", "A"})
+	case "U-or-E":
+		return spec.Body != nil && spec.Body.MinItems > 0
+	case "nonempty-category":
+		return spec.Fields != nil && len(spec.Fields.RequiredAny) > 0
+	case "one-line.highlight":
+		return spec.Fields != nil && slices.Contains(spec.Fields.RequiredWhenNoVariant, "highlight")
+	case "three.items", "save.items":
+		return slices.Contains(variantRequired(spec.Variants, strings.TrimSuffix(name, ".items")), "items")
+	case "decision.fit-or-recommendation":
+		return slices.ContainsFunc(variantRequiredAny(spec.Variants, "decision"), func(group []string) bool {
+			return slices.Equal(group, []string{"fit", "recommendation"})
+		})
+	case "title", "body":
+		return want.Syntax == "gallery-story"
+	default:
+		return false
+	}
+}
+
+func hasRequiredAny(fields *FieldsSpec, want []string) bool {
+	if fields == nil {
+		return false
+	}
+	return slices.ContainsFunc(fields.RequiredAny, func(group []string) bool { return slices.Equal(group, want) })
+}
+
+func variantRequired(variants []VariantSpec, name string) []string {
+	for _, variant := range variants {
+		if variant.Name == name {
+			return variant.Required
+		}
+	}
+	return nil
+}
+
+func variantRequiredAny(variants []VariantSpec, name string) [][]string {
+	for _, variant := range variants {
+		if variant.Name == name {
+			return variant.RequiredAny
+		}
+	}
+	return nil
+}
+
+func comparePublicDefaults(t *testing.T, spec *LayoutSpec, want upstreamAgentContract, controls map[string]publicCanonicalControl) {
+	t.Helper()
+	for name, value := range want.Defaults {
+		if _, ok := controls[name]; ok || abstractSemanticDefault(name, value) || abstractOracleDefault(name) {
+			continue
+		}
+		variant, field, dotted := strings.Cut(name, ".")
+		if dotted && field != "actions" {
+			if got := variantDefaults(spec.Variants, variant)[field]; got != value {
+				t.Errorf("%s: public variant default %s = %q, want %q", want.Syntax, name, got, value)
+			}
+			continue
+		}
+		if dotted && field == "actions" {
+			defaults := variantDefaults(spec.Variants, variant)
+			got := strings.Join([]string{defaults["primary"], defaults["secondary"], defaults["tertiary"]}, "/")
+			if got != value {
+				t.Errorf("%s: public variant actions default %s = %q, want %q", want.Syntax, name, got, value)
+			}
+			continue
+		}
+		t.Errorf("%s: upstream default %q=%q has no direct or explicit abstract public classification", want.Syntax, name, value)
+	}
+	for _, variant := range spec.Variants {
+		for field, value := range variant.Defaults {
+			if want.Defaults[variant.Name+"."+field] == value {
+				continue
+			}
+			actions := want.Defaults[variant.Name+".actions"]
+			if actions != "" && slices.Contains(strings.Split(actions, "/"), value) {
+				continue
+			}
+			t.Errorf("%s: public variant default %s.%s=%q is absent upstream", want.Syntax, variant.Name, field, value)
+		}
+	}
+}
+
+func abstractOracleDefault(name string) bool {
+	return name == "caps" || name == "single-image" || name == "multi-image" || strings.HasPrefix(name, "max-") || strings.HasPrefix(name, "unknown-") ||
+		strings.HasPrefix(name, "omitted-") || strings.HasSuffix(name, "-out-of-range") || name == "proof-without-source"
+}
+
+func TestBuiltinPublicCanonicalSchemaOmitsIgnoredLegacyInputs(t *testing.T) {
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	contracts := map[string]upstreamAgentContract{}
+	for _, contract := range readUpstreamAgentContracts(t).Contracts {
+		contracts[contract.Syntax] = contract
+	}
+	tests := []struct {
+		name, location, field string
+	}{
+		{name: "toolbox", location: "Rows.Schema", field: "url"},
+		{name: "quote-card", location: "Fields.Optional", field: "author"},
+		{name: "infographic", location: "Fields.Optional", field: "variant"},
+		{name: "infographic", location: "Fields.Optional", field: "layout"},
+		{name: "callout", location: "Opener.Params", field: "variant"},
+	}
+	for _, tt := range tests {
+		spec, ok := c.Get(tt.name)
+		if !ok {
+			t.Fatalf("missing catalog entry %q", tt.name)
+		}
+		spec = publicLayoutShowSpec(t, spec)
+		want := contracts[tt.name]
+		for name, control := range publicCanonicalControls(spec, want) {
+			if name == tt.field && control.Location == tt.location {
+				t.Errorf("%s: public %s leaks ignored/legacy control %q", tt.name, tt.location, tt.field)
+			}
+		}
+	}
+}
+
+func TestBuiltinCanonicalExamplesUseOnlyPublicSchema(t *testing.T) {
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for _, spec := range c.ListFiltered(ListFilter{Lifecycle: LifecycleRecommended}) {
+		lines := strings.Split(strings.TrimSpace(spec.Example), "\n")
+		opener, err := parseBlockOpener(lines[0])
+		if err != nil {
+			t.Errorf("%s: parse canonical opener: %v", spec.Name, err)
+			continue
+		}
+		if spec.OpenerCompatibilityOnly && (opener.RawParams != "" || len(opener.Params) != 0) {
+			t.Errorf("%s: canonical example uses compatibility-only opener", spec.Name)
+		}
+		body, err := witnessBody(lines)
+		if err != nil {
+			t.Errorf("%s: parse canonical body: %v", spec.Name, err)
+			continue
+		}
+		facts, issues := parseBodyFacts(spec, spec.BodyFormat, body)
+		if len(issues) != 0 {
+			t.Errorf("%s: parse canonical facts: %v", spec.Name, issues)
+			continue
+		}
+		if spec.Fields != nil {
+			for _, field := range spec.Fields.Compatibility {
+				if len(facts.fieldValues[field.Name]) != 0 {
+					t.Errorf("%s: canonical example uses compatibility-only field %q", spec.Name, field.Name)
+				}
+			}
+		}
+		if spec.BodyFormat == BodyFormatRows && spec.Rows != nil && !spec.RowsCompatibilityOnly && !slices.Contains(spec.AgentContract.Required, "rows") {
+			for i, row := range facts.rows {
+				if len(row) > len(spec.Rows.Schema) {
+					t.Errorf("%s: canonical row %d has %d cells, public schema has %d", spec.Name, i+1, len(row), len(spec.Rows.Schema))
+				}
+			}
+		}
+	}
+}
+
+func TestPinnedProjectionRejectsCoordinatedRuntimeAndAgentContractDrift(t *testing.T) {
+	base := func() *LayoutSpec {
+		return &LayoutSpec{
+			Name:       "cta",
+			BodyFormat: BodyFormatFields,
+			Fields:     &FieldsSpec{Optional: []FieldSpec{{Name: "points", AppliesTo: []string{"trial"}}}},
+			AgentContract: &AgentContractSpec{
+				BodyFormat:    BodyFormatFields,
+				Applicability: map[string][]string{"points": {"trial"}},
+			},
+		}
+	}
+	projection := pinnedAgentContractProjectionsBySyntax(t)["cta"]
+	for _, tt := range []struct {
+		name, dimension string
+		mutate          func(*LayoutSpec)
+	}{
+		{
+			name: "body format", dimension: "body_format",
+			mutate: func(spec *LayoutSpec) {
+				spec.BodyFormat = BodyFormatRows
+				spec.AgentContract.BodyFormat = BodyFormatRows
+			},
+		},
+		{
+			name: "applicability", dimension: "applicability",
+			mutate: func(spec *LayoutSpec) {
+				spec.Fields.Optional[0].AppliesTo = []string{"consult"}
+				spec.AgentContract.Applicability["points"] = []string{"consult"}
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := base()
+			tt.mutate(spec)
+			expected := projectAgentContract(base())
+			expected.BodyFormat = projection.BodyFormat
+			expected.Applicability = projection.Applicability
+			if diff := compareAgentContracts(projectAgentContract(spec), expected); !slices.Equal(diff, []string{tt.dimension}) {
+				t.Fatalf("coordinated drift dimensions = %v, want [%s]", diff, tt.dimension)
+			}
+		})
+	}
+}
+
+type agentContractProjection struct {
+	Syntax         string
+	InputPositions []string
+	BodyFormat     string
+	Required       []string
+	Optional       []string
+	Enums          map[string][]string
+	Defaults       map[string]string
+	Applicability  map[string][]string
+	Invalid        []string
+	Ignored        []string
+	Legacy         []string
+}
+
+func projectAgentContract(spec *LayoutSpec) agentContractProjection {
+	contract := spec.AgentContract
+	if contract == nil {
+		return agentContractProjection{Syntax: spec.Name}
+	}
+	got := agentContractProjection{
+		Syntax:        spec.Name,
+		BodyFormat:    contract.BodyFormat,
+		Required:      contract.Required,
+		Optional:      contract.Optional,
+		Enums:         contract.Enums,
+		Defaults:      contract.Defaults,
+		Applicability: contract.Applicability,
+		Invalid:       contract.Invalid,
+		Ignored:       contract.Ignored,
+		Legacy:        contract.Legacy,
+	}
+	for _, input := range spec.InputPositions {
+		got.InputPositions = append(got.InputPositions, string(input))
+	}
+	return got
+}
+
+func expectedAgentContract(want upstreamAgentContract, bodyFormat string, applicability map[string][]string) agentContractProjection {
+	return agentContractProjection{
+		Syntax:         want.Syntax,
+		InputPositions: want.Input,
+		BodyFormat:     bodyFormat,
+		Required:       want.Required,
+		Optional:       want.Optional,
+		Enums:          want.Enums,
+		Defaults:       want.Defaults,
+		Applicability:  applicability,
+		Invalid:        want.Invalid,
+		Ignored:        want.Ignored,
+		Legacy:         want.Legacy,
+	}
+}
+
+func compareAgentContracts(got, want agentContractProjection) []string {
+	var diff []string
+	checks := []struct {
+		name  string
+		equal bool
+	}{
+		{"syntax", got.Syntax == want.Syntax},
+		{"input_positions", slices.Equal(got.InputPositions, want.InputPositions)},
+		{"body_format", got.BodyFormat == want.BodyFormat},
+		{"required", slices.Equal(got.Required, want.Required)},
+		{"optional", slices.Equal(got.Optional, want.Optional)},
+		{"enums", reflect.DeepEqual(got.Enums, want.Enums)},
+		{"defaults", reflect.DeepEqual(got.Defaults, want.Defaults)},
+		{"applicability", reflect.DeepEqual(got.Applicability, want.Applicability)},
+		{"invalid", slices.Equal(got.Invalid, want.Invalid)},
+		{"ignored", slices.Equal(got.Ignored, want.Ignored)},
+		{"legacy", slices.Equal(got.Legacy, want.Legacy)},
+	}
+	for _, check := range checks {
+		if !check.equal {
+			diff = append(diff, check.name)
+		}
+	}
+	return diff
+}
+
+func TestAgentContractProjectionDetectsEveryMetadataDimensionDrift(t *testing.T) {
+	projection := func() agentContractProjection {
+		return agentContractProjection{
+			Syntax:         "fixture",
+			InputPositions: []string{"body-kv"},
+			BodyFormat:     BodyFormatFields,
+			Required:       []string{"title"},
+			Optional:       []string{"variant"},
+			Enums:          map[string][]string{"variant": {"plain", "card"}},
+			Defaults:       map[string]string{"variant": "plain"},
+			Applicability:  map[string][]string{"detail": {"card"}},
+			Invalid:        []string{"blank-title"},
+			Ignored:        []string{"unknown-fields"},
+			Legacy:         []string{"case-folded-variant"},
+		}
+	}
+	tests := []struct {
+		name, dimension string
+		mutate          func(*agentContractProjection)
+	}{
+		{name: "syntax", dimension: "syntax", mutate: func(got *agentContractProjection) { got.Syntax = "other" }},
+		{name: "input positions", dimension: "input_positions", mutate: func(got *agentContractProjection) { got.InputPositions = append(got.InputPositions, "json") }},
+		{name: "body format", dimension: "body_format", mutate: func(got *agentContractProjection) { got.BodyFormat = BodyFormatRows }},
+		{name: "required", dimension: "required", mutate: func(got *agentContractProjection) { got.Required = nil }},
+		{name: "optional", dimension: "optional", mutate: func(got *agentContractProjection) { got.Optional = nil }},
+		{name: "required added to optional", dimension: "optional", mutate: func(got *agentContractProjection) { got.Optional = append(got.Optional, "title") }},
+		{name: "catalog-only enum", dimension: "enums", mutate: func(got *agentContractProjection) { got.Enums["catalog-only"] = []string{"drift"} }},
+		{name: "enum order", dimension: "enums", mutate: func(got *agentContractProjection) { got.Enums["variant"] = []string{"card", "plain"} }},
+		{name: "missing default", dimension: "defaults", mutate: func(got *agentContractProjection) { delete(got.Defaults, "variant") }},
+		{name: "default value", dimension: "defaults", mutate: func(got *agentContractProjection) { got.Defaults["variant"] = "card" }},
+		{name: "applicability", dimension: "applicability", mutate: func(got *agentContractProjection) { got.Applicability["detail"] = []string{"plain"} }},
+		{name: "invalid", dimension: "invalid", mutate: func(got *agentContractProjection) { got.Invalid = append(got.Invalid, "extra") }},
+		{name: "ignored", dimension: "ignored", mutate: func(got *agentContractProjection) { got.Ignored = append(got.Ignored, "extra") }},
+		{name: "legacy", dimension: "legacy", mutate: func(got *agentContractProjection) { got.Legacy = append(got.Legacy, "extra") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := projection()
+			got := projection()
+			tt.mutate(&got)
+			if diff := compareAgentContracts(got, want); !slices.Equal(diff, []string{tt.dimension}) {
+				t.Fatalf("drift dimensions = %v, want [%s]", diff, tt.dimension)
+			}
+		})
+	}
+}
+
+func readUpstreamAgentContracts(t *testing.T) upstreamAgentContractOracle {
+	t.Helper()
+	data, err := os.ReadFile("testdata/upstream_agent_contracts.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oracle upstreamAgentContractOracle
+	if err := yaml.Unmarshal(data, &oracle); err != nil {
+		t.Fatal(err)
+	}
+	return oracle
+}
+
+func readUpstreamAgentContractProjections(t *testing.T) upstreamAgentContractProjectionOracle {
+	t.Helper()
+	data, err := os.ReadFile("testdata/upstream_agent_contract_projections.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oracle upstreamAgentContractProjectionOracle
+	if err := yaml.Unmarshal(data, &oracle); err != nil {
+		t.Fatal(err)
+	}
+	return oracle
+}
+
+func pinnedAgentContractProjectionsBySyntax(t *testing.T) map[string]upstreamAgentContractProjection {
+	t.Helper()
+	oracle := readUpstreamAgentContractProjections(t)
+	bySyntax := make(map[string]upstreamAgentContractProjection, len(oracle.Projections))
+	for _, projection := range oracle.Projections {
+		bySyntax[projection.Syntax] = projection
+	}
+	return bySyntax
+}
+
+func TestBuiltinYAMLExplicitlyDeclaresLifecycle(t *testing.T) {
+	categories, err := assets.ListBuiltinLayoutCategories()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, category := range categories {
+		names, err := assets.ListBuiltinLayouts(category)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range names {
+			raw, err := assets.ReadBuiltinLayout(category, name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(raw)
+			if !strings.Contains(text, "\nlifecycle: recommended\n") && !strings.Contains(text, "\nlifecycle: compatibility\n") {
+				t.Errorf("%s/%s does not explicitly declare a valid lifecycle", category, name)
+			}
+		}
+	}
+}
+
+type imageModuleParamContract struct {
+	name, defaultValue string
+	enum               []string
+}
+
+type imageModuleFieldContract struct {
+	name, example string
+}
+
+type imageModuleContract struct {
+	format, category, lifecycle string
+	minImages, maxImages        int
+	paramStyle                  string
+	params                      []imageModuleParamContract
+	requiredFields              []imageModuleFieldContract
+	optionalFields              []imageModuleFieldContract
+	metadata                    LayoutMetadata
+	example                     string
+}
+
+type freeLayoutContract struct {
+	format, category, lifecycle string
+	opener                      *OpenerSpec
+	body                        *BodySpec
+	rows                        *RowsSpec
+	metadata                    LayoutMetadata
+	example                     string
+}
+
+type compatibilityLayoutContract struct {
+	format, replacement string
+	opener              *OpenerSpec
+	body                *BodySpec
+	example             string
+}
+
+func TestFreeLayoutModuleContracts(t *testing.T) {
+	contracts := map[string]freeLayoutContract{
+		"split": {
+			format: BodyFormatSplit, category: "free-layout", lifecycle: LifecycleRecommended,
+			opener: &OpenerSpec{ParamStyle: ParamStyleBracket, Params: []ParamSpec{
+				{Name: "ratio", Description: "左右两栏比例；省略时由渲染器使用默认 1:1", Default: "1:1", Example: "3:2"},
+			}},
+			body:     &BodySpec{Separator: "---", MinItems: 2},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#split"},
+			example:  splitGuideSnippet,
+		},
+		"flow": {
+			format: BodyFormatLines, category: "free-layout", lifecycle: LifecycleRecommended,
+			opener:   &OpenerSpec{Caption: true},
+			body:     &BodySpec{MinItems: 1, Separator: "→"},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#flow"},
+			example:  flowGuideSnippet,
+		},
+		"matrix": {
+			format: BodyFormatRows, category: "free-layout", lifecycle: LifecycleRecommended,
+			opener: &OpenerSpec{ParamStyle: ParamStyleTokens, Params: []ParamSpec{
+				{Name: "headers", Required: true, Description: "逗号分隔的表头", Example: "能力,基础版,专业版,企业版"},
+			}},
+			rows: &RowsSpec{Delimiter: "|", MinColumns: 2, Schema: []FieldSpec{
+				{Name: "dimension", Description: "对比维度"},
+				{Name: "value", Description: "至少一个方案值"},
+			}},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#matrix"},
+			example:  matrixGuideSnippet,
+		},
+		"dialogue-pair": {
+			format: BodyFormatDialogue, category: "free-layout", lifecycle: LifecycleRecommended,
+			opener: &OpenerSpec{ParamStyle: ParamStyleTokens, Params: []ParamSpec{
+				{Name: "left", Description: "左侧人物名称", Default: "用户"},
+				{Name: "right", Description: "右侧人物名称", Default: "助手"},
+			}},
+			body:     &BodySpec{MinItems: 1, AllowedPrefixes: []string{"U:", "E:"}},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#dialogue-pair"},
+			example:  dialoguePairGuideSnippet,
+		},
+	}
+
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for name, contract := range contracts {
+		t.Run(name, func(t *testing.T) {
+			spec, ok := c.Get(name)
+			if !ok {
+				t.Fatalf("missing %s", name)
+			}
+			if spec.BodyFormat != contract.format {
+				t.Errorf("body_format = %q, want %q", spec.BodyFormat, contract.format)
+			}
+			if spec.Category != contract.category {
+				t.Errorf("category = %q, want %q", spec.Category, contract.category)
+			}
+			if spec.Lifecycle != contract.lifecycle {
+				t.Errorf("lifecycle = %q, want %q", spec.Lifecycle, contract.lifecycle)
+			}
+			if !reflect.DeepEqual(spec.Opener, contract.opener) {
+				t.Errorf("opener = %#v, want %#v", spec.Opener, contract.opener)
+			}
+			if !reflect.DeepEqual(spec.Body, contract.body) {
+				t.Errorf("body = %#v, want %#v", spec.Body, contract.body)
+			}
+			if !reflect.DeepEqual(spec.Rows, contract.rows) {
+				t.Errorf("rows = %#v, want %#v", spec.Rows, contract.rows)
+			}
+			if !reflect.DeepEqual(spec.Metadata, contract.metadata) {
+				t.Errorf("metadata = %#v, want %#v", spec.Metadata, contract.metadata)
+			}
+			if spec.Example != contract.example {
+				t.Errorf("canonical example differs from pinned upstream guide snippet\ngot:  %q\nwant: %q", spec.Example, contract.example)
+			}
+			if err := c.ValidateWitness(WitnessContract{Module: name, Example: spec.Example}); err != nil {
+				t.Fatalf("witness invalid: %v", err)
+			}
+		})
+	}
+}
+
+func TestFreeLayoutModuleRejectedCases(t *testing.T) {
+	tests := []struct {
+		name, markdown, category string
+	}{
+		{name: "split missing separator", markdown: ":::split\n左侧\n右侧\n:::\n", category: "separator"},
+		{name: "split unknown opener param", markdown: ":::split ratio=3:2\n左侧\n---\n右侧\n:::\n", category: "param_style"},
+		{name: "flow empty", markdown: ":::flow[空流程]\n:::\n", category: "at least 1 items"},
+		{name: "flow unknown opener param", markdown: ":::flow extra=value\n节点\n:::\n", category: "opener"},
+		{name: "matrix markdown separator row", markdown: ":::matrix headers=能力,基础版,专业版\n| 能力 | 基础版 | 专业版 |\n|---|---|---|\n| 高级模块 | 有 | 有 |\n:::\n", category: "column 1"},
+		{name: "matrix short row", markdown: ":::matrix headers=能力,基础版\n高级模块\n:::\n", category: "at least 2 columns"},
+		{name: "matrix unknown opener param", markdown: ":::matrix columns=2\n高级模块|有\n:::\n", category: "undeclared opener parameter"},
+		{name: "dialogue empty", markdown: ":::dialogue-pair\n:::\n", category: "at least 1 items"},
+		{name: "dialogue unknown opener param", markdown: ":::dialogue-pair speaker=读者\nU: 问题\n:::\n", category: "undeclared opener parameter"},
+		{name: "dialogue bracket personas", markdown: ":::dialogue-pair[读者 | 作者]\nU: 问题\n:::\n", category: "opener caption"},
+		{name: "dialogue rejects unconfigured named speakers", markdown: ":::dialogue-pair\n读者：问题\n作者：回答\n:::\n", category: "not allowed"},
+	}
+
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report := c.Validate(tt.markdown)
+			if len(report.Errors) == 0 {
+				t.Fatal("expected validation error")
+			}
+			if !strings.Contains(report.Errors[0].Message, tt.category) {
+				t.Fatalf("error = %q, want category %q", report.Errors[0].Message, tt.category)
+			}
+		})
+	}
+}
+
+func TestNewImageModuleContracts(t *testing.T) {
+	contracts := map[string]imageModuleContract{
+		"gallery-grid": {
+			format: BodyFormatMarkdownImages, category: "evidence", lifecycle: LifecycleRecommended, minImages: 1,
+			paramStyle: ParamStyleBraces,
+			params: []imageModuleParamContract{
+				{name: "variant", enum: []string{"clean", "card"}, defaultValue: "clean"},
+				{name: "density", enum: []string{"compact", "normal", "airy"}, defaultValue: "normal"},
+				{name: "columns", defaultValue: "3"},
+				{name: "image_shape", enum: []string{"square", "rounded", "phone", "poster", "original"}, defaultValue: "square"},
+				{name: "caption_style", enum: []string{"none", "minimal", "numbered", "label"}, defaultValue: "minimal"},
+				{name: "accent", enum: []string{"brand", "muted", "contrast"}, defaultValue: "brand"},
+				{name: "wechat_safe_level", enum: []string{"strict", "normal"}, defaultValue: "normal"},
+			},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#gallery-grid"},
+			example:  galleryGridGuideSnippet,
+		},
+		"gallery-story": {
+			format: BodyFormatMarkdownImages, category: "evidence", lifecycle: LifecycleRecommended, minImages: 1,
+			paramStyle: ParamStyleBraces,
+			params: []imageModuleParamContract{
+				{name: "variant", enum: []string{"clean", "card"}, defaultValue: "card"},
+				{name: "density", enum: []string{"compact", "normal", "airy"}, defaultValue: "normal"},
+				{name: "caption_style", enum: []string{"none", "minimal", "numbered", "label"}, defaultValue: "minimal"},
+				{name: "accent", enum: []string{"brand", "muted", "contrast"}, defaultValue: "brand"},
+				{name: "wechat_safe_level", enum: []string{"strict", "normal"}, defaultValue: "normal"},
+			},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#gallery-story"},
+			example:  galleryStoryGuideSnippet,
+		},
+		"image-phone-shot": {
+			format: BodyFormatMarkdownImages, category: "evidence", lifecycle: LifecycleRecommended, minImages: 1,
+			paramStyle: ParamStyleBraces,
+			params: []imageModuleParamContract{
+				{name: "columns", defaultValue: "2"},
+				{name: "image_shape", enum: []string{"square", "rounded", "phone", "poster", "original"}, defaultValue: "phone"},
+				{name: "variant", enum: []string{"clean", "card"}, defaultValue: "clean"},
+				{name: "wechat_safe_level", enum: []string{"strict", "normal"}, defaultValue: "normal"}, {name: "title"},
+			},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#image-phone-shot"},
+			example:  imagePhoneShotGuideSnippet,
+		},
+		"figure-caption": {
+			format: BodyFormatMarkdownFields, category: "evidence", lifecycle: LifecycleRecommended, minImages: 1, maxImages: 1,
+			paramStyle: ParamStyleBraces,
+			params: []imageModuleParamContract{
+				{name: "caption_style", enum: []string{"none", "minimal", "numbered", "label"}, defaultValue: "numbered"},
+			},
+			requiredFields: []imageModuleFieldContract{{name: "caption", example: "2026 年用户增长曲线"}},
+			optionalFields: []imageModuleFieldContract{{name: "source", example: "内部实验数据"}},
+			metadata:       LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#figure-caption"},
+			example:        figureCaptionGuideSnippet,
+		},
+		"svg-reveal": {
+			format: BodyFormatFields, category: "interactive", lifecycle: LifecycleRecommended,
+			paramStyle: ParamStyleBraces,
+			params: []imageModuleParamContract{
+				{name: "variant", enum: []string{"clean", "card"}, defaultValue: "card"},
+				{name: "accent", enum: []string{"brand", "muted", "contrast"}, defaultValue: "brand"},
+				{name: "density", enum: []string{"compact", "normal", "airy"}, defaultValue: "normal"},
+				{name: "wechat_safe_level", enum: []string{"strict", "normal"}, defaultValue: "normal"},
+				{name: "svg_fallback", enum: []string{"static", "first-layer"}, defaultValue: "first-layer"},
+			},
+			requiredFields: []imageModuleFieldContract{
+				{name: "question", example: "点击查看答案"},
+				{name: "answer", example: "42"},
+			},
+			optionalFields: []imageModuleFieldContract{},
+			metadata:       LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#svg-reveal"},
+			example:        svgRevealGuideSnippet,
+		},
+		"svg-swipe-gallery": {
+			format: BodyFormatMarkdownImages, category: "interactive", lifecycle: LifecycleRecommended, minImages: 2,
+			paramStyle: ParamStyleBraces,
+			params: []imageModuleParamContract{
+				{name: "variant", enum: []string{"clean", "card"}, defaultValue: "card"},
+				{name: "accent", enum: []string{"brand", "muted", "contrast"}, defaultValue: "brand"},
+				{name: "density", enum: []string{"compact", "normal", "airy"}, defaultValue: "normal"},
+				{name: "wechat_safe_level", enum: []string{"strict", "normal"}, defaultValue: "normal"},
+				{name: "svg_fallback", enum: []string{"static", "first-layer"}, defaultValue: "first-layer"}, {name: "title"},
+			},
+			metadata: LayoutMetadata{Author: "md2wechat", Provenance: "builtin", InspiredBy: "advanced-layout-modules-guide.md#svg-swipe-gallery"},
+			example:  svgSwipeGalleryGuideSnippet,
+		},
+	}
+
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for name, contract := range contracts {
+		t.Run(name, func(t *testing.T) {
+			spec, ok := c.Get(name)
+			if !ok {
+				t.Fatalf("missing %s", name)
+			}
+			if spec.BodyFormat != contract.format {
+				t.Errorf("body_format = %q, want %q", spec.BodyFormat, contract.format)
+			}
+			if spec.Category != contract.category {
+				t.Errorf("category = %q, want %q", spec.Category, contract.category)
+			}
+			if spec.Lifecycle != contract.lifecycle {
+				t.Errorf("lifecycle = %q, want normalized %q", spec.Lifecycle, contract.lifecycle)
+			}
+			minImages, maxImages := bodyImageLimits(spec.Body)
+			if minImages != contract.minImages || maxImages != contract.maxImages {
+				t.Errorf("image limits = (%d, %d), want (%d, %d)", minImages, maxImages, contract.minImages, contract.maxImages)
+			}
+			if spec.Opener == nil {
+				t.Fatal("missing opener contract")
+			}
+			if spec.Opener.ParamStyle != contract.paramStyle {
+				t.Errorf("opener param_style = %q, want %q", spec.Opener.ParamStyle, contract.paramStyle)
+			}
+			if got := imageModuleParams(spec.Opener.Params); !reflect.DeepEqual(got, contract.params) {
+				t.Errorf("opener params = %#v, want %#v", got, contract.params)
+			}
+			if got := imageModuleFields(spec.Fields, true); !reflect.DeepEqual(got, contract.requiredFields) {
+				t.Errorf("required fields = %#v, want %#v", got, contract.requiredFields)
+			}
+			if got := imageModuleFields(spec.Fields, false); !reflect.DeepEqual(got, contract.optionalFields) {
+				t.Errorf("optional fields = %#v, want %#v", got, contract.optionalFields)
+			}
+			if !reflect.DeepEqual(spec.Metadata, contract.metadata) {
+				t.Errorf("metadata = %#v, want %#v", spec.Metadata, contract.metadata)
+			}
+			if spec.Example != contract.example {
+				t.Errorf("canonical example differs from pinned upstream guide snippet\ngot:  %q\nwant: %q", spec.Example, contract.example)
+			}
+			if err := c.ValidateWitness(WitnessContract{Module: name, Example: spec.Example}); err != nil {
+				t.Fatalf("witness invalid: %v", err)
+			}
+			if result := c.Validate(spec.Example); len(result.Errors) != 0 {
+				t.Fatalf("example invalid: %+v", result.Errors)
+			}
+		})
+	}
+}
+
+func bodyImageLimits(body *BodySpec) (int, int) {
+	if body == nil {
+		return 0, 0
+	}
+	return body.MinImages, body.MaxImages
+}
+
+func imageModuleParams(params []ParamSpec) []imageModuleParamContract {
+	contracts := make([]imageModuleParamContract, 0, len(params))
+	for _, param := range params {
+		contracts = append(contracts, imageModuleParamContract{
+			name: param.Name, enum: param.Enum, defaultValue: param.Default,
+		})
+	}
+	return contracts
+}
+
+func imageModuleFields(fields *FieldsSpec, required bool) []imageModuleFieldContract {
+	if fields == nil {
+		return nil
+	}
+	items := fields.Optional
+	if required {
+		items = fields.Required
+	}
+	contracts := make([]imageModuleFieldContract, 0, len(items))
+	for _, field := range items {
+		contracts = append(contracts, imageModuleFieldContract{name: field.Name, example: field.Example})
+	}
+	return contracts
+}
+
+const galleryGridGuideSnippet = `:::gallery-grid{columns=3 variant=card}
+![A](https://example.com/1.jpg) | 首页状态
+![B](https://example.com/2.jpg) | 详情状态
+![C](https://example.com/3.jpg) | 结果状态
+:::
+`
+
+const galleryStoryGuideSnippet = `:::gallery-story{variant=card}
+![第一站](https://example.com/story-1.jpg) | 第一站 | 用一张图建立现场感。
+![第二站](https://example.com/story-2.jpg) | 第二站 | 用段落解释关键细节。
+:::
+`
+
+const imagePhoneShotGuideSnippet = `:::image-phone-shot{columns=2 image_shape=phone}
+![首页](https://example.com/home.jpg) | 首页截图
+![详情](https://example.com/detail.jpg) | 详情截图
+:::
+`
+
+const figureCaptionGuideSnippet = `:::figure-caption{caption_style=numbered}
+![增长曲线](https://example.com/chart.jpg)
+caption: 2026 年用户增长曲线
+source: 内部实验数据
+:::
+`
+
+const svgRevealGuideSnippet = `:::svg-reveal{accent=brand}
+question: 点击查看答案
+answer: 42
+:::
+`
+
+const svgSwipeGalleryGuideSnippet = `:::svg-swipe-gallery
+![A](https://mmbiz.qpic.cn/...) | 第一张
+![B](https://mmbiz.qpic.cn/...) | 第二张
+:::
+`
+
+const splitGuideSnippet = `:::split
+## 主判断
+
+高级排版不是把页面做花，而是让读者先看懂重点。
+
+---
+
+## 落地方式
+
+左侧讲结论，右侧放证据、说明或下一步，让两块信息都能独立阅读。
+:::
+`
+
+const flowGuideSnippet = `:::flow[Agent 发布流程]
+草稿输入 → 结构判断 → 模块选择 → 视觉校准 → 发布检查
+:::
+`
+
+const matrixGuideSnippet = `:::matrix headers=能力,基础版,专业版,企业版
+高级模块|有|有|有
+主题定制|无|有|有
+API 调用|无|有|有
+私有部署|无|无|有
+:::
+`
+
+const dialoguePairGuideSnippet = `:::dialogue-pair left=读者 right=作者
+U: 高级模块和普通 Markdown 有什么区别？
+E: 高级模块把结构、层级和视觉节奏一起带进公众号正文，不只是把文字换个样式。
+
+U: 我需要学多少个模块？
+E: 先学开场、信息卡、证据、总结和 CTA，绝大多数文章就能明显升级。
+:::
+`
+
+var recommendedModuleNames = []string{
+	"audience-fit", "author-card", "bridge", "callout", "cards", "cases",
+	"changelog", "checklist", "compare", "comparison-table", "cta", "definition",
+	"dialogue-pair", "faq", "figure-caption", "flow", "gallery-grid", "gallery-story",
+	"hero", "cover-reveal", "expand", "gallery", "image-annotate", "image-compare", "image-phone-shot", "image-steps", "closing",
+	"image-text", "infographic", "label-title", "logos", "manifesto", "matrix",
+	"metrics", "myth-fact", "notice", "part", "people", "pricing", "question",
+	"quote", "quote-card", "resource-list", "series", "specs", "split", "stat-row",
+	"steps", "subscribe", "summary", "svg-reveal", "svg-swipe-gallery", "timeline", "epilogue", "section-title",
+	"toc", "toolbox", "tweet", "verdict",
+}
+
+var compatibilityModuleNames = []string{"dialogue", "longimage"}
+
+func TestRecommendedSyntaxInventoryHasExactCount(t *testing.T) {
+	if got := len(recommendedModuleNames); got != 59 {
+		t.Fatalf("recommended syntax inventory = %d, want 59", got)
+	}
+}
+
+func TestMilestoneLayoutInventory(t *testing.T) {
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(c.ListFiltered(ListFilter{})); got != 59 {
+		t.Fatalf("recommended syntax count = %d, want 59", got)
+	}
+	if got := len(c.ListFiltered(ListFilter{Lifecycle: LifecycleCompatibility})); got != 2 {
+		t.Fatalf("compatibility syntax count = %d, want 2", got)
+	}
+	for _, name := range []string{"cover-reveal", "expand", "gallery"} {
+		spec, ok := c.Get(name)
+		if !ok || spec.Lifecycle != LifecycleRecommended {
+			t.Errorf("%s is not recommended", name)
+		}
+	}
+}
+
+func moduleNames(mods []*LayoutSpec) []string {
+	names := make([]string, 0, len(mods))
+	for _, mod := range mods {
+		names = append(names, mod.Name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+func TestListFilteredDefaultsToRecommended(t *testing.T) {
+	c := NewCatalog()
+	c.modules["current"] = &LayoutSpec{Name: "current", Lifecycle: LifecycleRecommended}
+	c.modules["legacy"] = &LayoutSpec{Name: "legacy", Lifecycle: LifecycleCompatibility}
+	if got := moduleNames(c.ListFiltered(ListFilter{})); !slices.Equal(got, []string{"current"}) {
+		t.Fatalf("default list = %v", got)
+	}
+	if got := moduleNames(c.ListFiltered(ListFilter{Lifecycle: LifecycleCompatibility})); !slices.Equal(got, []string{"legacy"}) {
+		t.Fatalf("compatibility list = %v", got)
+	}
+}
+
+func TestBuiltinRecommendedModuleSetMatchesUpstream(t *testing.T) {
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	got := moduleNames(c.ListFiltered(ListFilter{}))
+	want := slices.Clone(recommendedModuleNames)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestBuiltinCompatibilityModuleSetMatchesUpstream(t *testing.T) {
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	got := moduleNames(c.ListFiltered(ListFilter{Lifecycle: LifecycleCompatibility}))
+	want := slices.Clone(compatibilityModuleNames)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+}
+
+func TestCompatibilityModuleContracts(t *testing.T) {
+	contracts := map[string]compatibilityLayoutContract{
+		"dialogue": {
+			format: BodyFormatDialogue, replacement: "dialogue-pair",
+			opener: &OpenerSpec{Caption: true}, body: &BodySpec{MinItems: 1, AllowNamedSpeakers: true},
+			example: dialogueCompatibilityGuideSnippet,
+		},
+		"longimage": {
+			format: BodyFormatMarkdownImages, replacement: "image-text",
+			opener: nil, body: &BodySpec{MinImages: 1, MaxImages: 1},
+			example: longimageCompatibilityGuideSnippet,
+		},
+	}
+	wantAssertions := map[string]string{
+		"dialogue":  "你好",
+		"longimage": "",
+	}
+
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for name, contract := range contracts {
+		t.Run(name, func(t *testing.T) {
+			spec, ok := c.Get(name)
+			if !ok {
+				t.Fatalf("missing %s", name)
+			}
+			if spec.Lifecycle != LifecycleCompatibility {
+				t.Errorf("lifecycle = %q, want %q", spec.Lifecycle, LifecycleCompatibility)
+			}
+			if spec.BodyFormat != contract.format {
+				t.Errorf("body_format = %q, want %q", spec.BodyFormat, contract.format)
+			}
+			if !reflect.DeepEqual(spec.Opener, contract.opener) {
+				t.Errorf("opener = %#v, want %#v", spec.Opener, contract.opener)
+			}
+			if !reflect.DeepEqual(spec.Body, contract.body) {
+				t.Errorf("body = %#v, want %#v", spec.Body, contract.body)
+			}
+			if !strings.Contains(spec.WhenNotToUse, contract.replacement) {
+				t.Errorf("when_not_to_use = %q, want replacement %q", spec.WhenNotToUse, contract.replacement)
+			}
+			if len(spec.PairsWellWith) != 0 || len(spec.Variants) != 0 {
+				t.Errorf("compatibility module leaked recommendation guidance: pairs=%v variants=%v", spec.PairsWellWith, spec.Variants)
+			}
+			if spec.Example != contract.example {
+				t.Errorf("canonical migration witness differs\ngot:  %q\nwant: %q", spec.Example, contract.example)
+			}
+			if spec.ExampleAssertContains != wantAssertions[name] {
+				t.Errorf("example_assert_contains = %q, want %q", spec.ExampleAssertContains, wantAssertions[name])
+			}
+			if err := checkExecutableWitness(c, spec.Name, "", spec.Example, spec.ExampleAssertContains); err != nil {
+				t.Fatalf("witness invalid: %v", err)
+			}
+		})
+	}
+}
+
+func TestBuiltinCanonicalStableAssertions(t *testing.T) {
+	want := map[string]string{
+		"checklist":         "结构先搭好",
+		"dialogue-pair":     "高级模块和普通 Markdown 有什么区别？",
+		"figure-caption":    "2026 年用户增长曲线",
+		"flow":              "草稿输入",
+		"image-text":        "图和说明绑在一起，读者更容易跟上重点",
+		"question":          "md2wechat 是排版工具吗？",
+		"split":             "主判断",
+		"svg-swipe-gallery": "第一张",
+	}
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for name, assertion := range want {
+		spec, ok := c.Get(name)
+		if !ok {
+			t.Fatalf("missing %s", name)
+		}
+		if spec.ExampleAssertContains != assertion {
+			t.Errorf("%s example_assert_contains = %q, want %q", name, spec.ExampleAssertContains, assertion)
+		}
+		if !strings.Contains(spec.Example, assertion) {
+			t.Errorf("%s example does not contain assertion %q", name, assertion)
+		}
+	}
+}
+
+func TestCompatibilityModuleRejectedCases(t *testing.T) {
+	tests := []struct {
+		name, markdown, category string
+	}{
+		{name: "gallery requires an image", markdown: ":::gallery[空画廊]\n只有文字\n:::\n", category: "at least 1 image"},
+		{name: "dialogue requires full-width named separator", markdown: ":::dialogue[旧稿]\n用户: 你好\n:::\n", category: "full-width colon"},
+		{name: "longimage allows one image", markdown: ":::longimage[旧稿]\n![一](https://example.com/1.jpg)\n![二](https://example.com/2.jpg)\n:::\n", category: "at most 1 image"},
+	}
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report := c.Validate(tt.markdown)
+			if len(report.Errors) == 0 {
+				t.Fatal("expected validation error")
+			}
+			if !strings.Contains(report.Errors[0].Message, tt.category) {
+				t.Fatalf("error = %q, want category %q", report.Errors[0].Message, tt.category)
+			}
+		})
+	}
+}
+
+const dialogueCompatibilityGuideSnippet = `:::dialogue[主题对话]
+甲：你好
+乙：你好
+:::
+`
+
+const longimageCompatibilityGuideSnippet = `:::longimage
+![长图](https://example.com/longimage.jpg)
+:::
+`
+
+func TestKnownDriftContractsAreCalibrated(t *testing.T) {
+	calibratedFields := map[string]struct {
+		required []string
+		any      [][]string
+	}{
+		"hero":           {required: []string{"title"}},
+		"audience-fit":   {any: [][]string{{"fit", "avoid"}}},
+		"verdict":        {required: []string{"title"}},
+		"bridge":         {any: [][]string{{"title", "body", "next"}}},
+		"manifesto":      {required: []string{"title"}},
+		"quote":          {required: []string{"quote"}},
+		"image-text":     {required: []string{"image"}, any: [][]string{{"title", "body"}}},
+		"image-annotate": {required: []string{"image", "point"}},
+		"author-card":    {required: []string{"name"}},
+		"series":         {required: []string{"name", "title"}},
+		"subscribe":      {required: []string{"title"}},
+		"cta":            {required: []string{"title"}},
+		"tweet":          {required: []string{"name", "text"}},
+		"resource-list":  {required: []string{"name"}},
+	}
+	calibratedFormats := map[string]string{
+		"callout": BodyFormatMarkdownFields, "image-steps": BodyFormatMarkdownFields, "question": BodyFormatDialogue,
+	}
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range calibratedFields {
+		t.Run(name, func(t *testing.T) {
+			spec, ok := c.Get(name)
+			if !ok {
+				t.Fatalf("missing %s", name)
+			}
+			if got := fieldNames(spec.Fields.Required); !slices.Equal(got, want.required) {
+				t.Errorf("required = %v, want %v", got, want.required)
+			}
+			if got := spec.Fields.RequiredAny; !reflect.DeepEqual(got, want.any) {
+				t.Errorf("required_any = %v, want %v", got, want.any)
+			}
+		})
+	}
+	for name, want := range calibratedFormats {
+		spec, _ := c.Get(name)
+		if spec.BodyFormat != want {
+			t.Errorf("%s body_format = %q, want %q", name, spec.BodyFormat, want)
+		}
+	}
+	question, _ := c.Get("question")
+	if !slices.Equal(question.CompatibleBodyFormats, []string{BodyFormatJSONArray}) {
+		t.Errorf("question compatible formats = %v", question.CompatibleBodyFormats)
+	}
+	callout, _ := c.Get("callout")
+	wantOpener := &OpenerSpec{ParamStyle: ParamStyleToken, Params: []ParamSpec{{Name: "variant", Enum: []string{"info", "warning", "success", "danger"}}}}
+	if !reflect.DeepEqual(callout.Opener, wantOpener) {
+		t.Errorf("callout opener = %#v, want %#v", callout.Opener, wantOpener)
+	}
+	if !callout.OpenerCompatibilityOnly {
+		t.Error("callout legacy opener must be hidden from canonical discovery")
+	}
+}
+
+func TestTitleAndClosureCatalogContracts(t *testing.T) {
+	const classicSymbols = "spark-solid,spark-outline,diamond-solid,diamond-outline,reference-mark,asterism,double-circle,circle,square-solid,square-outline,star,infinity"
+	const brandSymbols = ",mountain,concentric-circles,nested-diamonds,four-petals,lens,orbits,archway,rounded-seal,four-point-star,honeycomb,mirrored-waves,open-book"
+	type contract struct {
+		category, defaultVariant, defaultSymbol string
+		variants                                []string
+		inputPositions                          []AgentInputPosition
+	}
+	contracts := map[string]contract{
+		"hero":          {category: "opening", defaultVariant: "editorial", variants: []string{"editorial", "briefing", "story", "masthead", "journal", "seal", "orbit"}, inputPositions: []AgentInputPosition{InputBodyKV}},
+		"section-title": {category: "opening", defaultVariant: "marker", variants: []string{"marker", "divider", "numbered", "frame", "focus", "vertical"}, inputPositions: []AgentInputPosition{InputBodyKV}},
+		"epilogue":      {category: "opening", defaultSymbol: "infinity", inputPositions: []AgentInputPosition{InputBodyKV}},
+		"closing":       {category: "conversion", defaultSymbol: "asterism", inputPositions: []AgentInputPosition{InputBodyKV}},
+		"cta":           {category: "conversion", defaultVariant: "save-follow", variants: []string{"save-follow", "consult", "trial"}, inputPositions: []AgentInputPosition{InputBodyKV}},
+	}
+	c := NewCatalog()
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range contracts {
+		t.Run(name, func(t *testing.T) {
+			spec, ok := c.Get(name)
+			if !ok {
+				t.Fatalf("missing %s", name)
+			}
+			if spec.Category != want.category || !slices.Equal(spec.InputPositions, want.inputPositions) {
+				t.Fatalf("category/input_positions = %q/%v, want %q/%v", spec.Category, spec.InputPositions, want.category, want.inputPositions)
+			}
+			if want.defaultVariant != "" {
+				field := fieldByName(spec.Fields.Optional, "variant")
+				if field.Default != want.defaultVariant {
+					t.Fatalf("variant default = %q, want %q", field.Default, want.defaultVariant)
+				}
+				if got := variantNames(spec.Variants); !slices.Equal(got, want.variants) {
+					t.Fatalf("variants = %v, want %v", got, want.variants)
+				}
+			}
+			if want.defaultSymbol != "" {
+				if got := fieldByName(spec.Fields.Optional, "symbol").Default; got != want.defaultSymbol {
+					t.Fatalf("symbol default = %q, want %q", got, want.defaultSymbol)
+				}
+			}
+			if name == "hero" || name == "section-title" || name == "epilogue" || name == "closing" {
+				wantSymbols := classicSymbols
+				if name != "epilogue" {
+					wantSymbols += brandSymbols
+				}
+				if got := strings.Join(fieldByName(spec.Fields.Optional, "symbol").Enum, ","); got != wantSymbols {
+					t.Fatalf("symbol enum = %q, want %q", got, wantSymbols)
+				}
+			}
+			switch name {
+			case "hero":
+				if got := fieldByName(spec.Fields.Optional, "symbol"); !slices.Equal(got.AppliesTo, []string{"masthead", "journal", "seal", "orbit"}) || got.Default != "" {
+					t.Fatalf("masthead symbol = %#v", got)
+				}
+				if got := variantDefaults(spec.Variants, "masthead"); !reflect.DeepEqual(got, map[string]string{"symbol": "spark-solid"}) {
+					t.Fatalf("masthead defaults = %#v", got)
+				}
+				for _, field := range []string{"kicker", "points", "image", "tags"} {
+					if got := fieldByName(spec.Fields.Optional, field).AppliesTo; !slices.Equal(got, []string{"editorial", "briefing", "story"}) {
+						t.Fatalf("%s applicability = %v", field, got)
+					}
+				}
+			case "section-title":
+				if got := fieldByName(spec.Fields.Optional, "symbol"); !slices.Equal(got.AppliesTo, []string{"marker", "divider", "focus", "vertical"}) || got.Default != "" {
+					t.Fatalf("section symbol = %#v", got)
+				}
+				if got := fieldByName(spec.Fields.Optional, "index"); !slices.Equal(got.AppliesTo, []string{"numbered"}) || got.MinRunes != 1 || got.MaxRunes != 4 {
+					t.Fatalf("numbered index = %#v", got)
+				}
+				for variant, wantDefaults := range map[string]map[string]string{
+					"marker":   {"symbol": "diamond-outline"},
+					"divider":  {"symbol": "spark-outline"},
+					"focus":    {"symbol": "double-circle"},
+					"vertical": {"symbol": "diamond-solid"},
+				} {
+					if got := variantDefaults(spec.Variants, variant); !reflect.DeepEqual(got, wantDefaults) {
+						t.Fatalf("%s defaults = %#v, want %#v", variant, got, wantDefaults)
+					}
+				}
+			case "cta":
+				if got := fieldByName(spec.Fields.Optional, "points").AppliesTo; !slices.Equal(got, []string{"trial"}) {
+					t.Fatalf("points applicability = %v", got)
+				}
+				if got := spec.Fields.Shapes; len(got) != 1 || got[0].Field != "points" || got[0].MaxParts != 3 {
+					t.Fatalf("points shape = %#v", got)
+				}
+				for _, field := range []string{"primary", "secondary", "tertiary"} {
+					if got := fieldByName(spec.Fields.Optional, field).Default; got != "" {
+						t.Fatalf("%s global default = %q, want empty", field, got)
+					}
+				}
+				for variant, wantDefaults := range map[string]map[string]string{
+					"save-follow": {"primary": "收藏这篇", "secondary": "关注更新", "tertiary": "转给同事"},
+					"consult":     {"primary": "回复「排版」", "secondary": "查看案例", "tertiary": "收藏这篇"},
+					"trial":       {"primary": "试一版高级稿", "secondary": "查看工作流", "tertiary": "获取 API Key"},
+				} {
+					if got := variantDefaults(spec.Variants, variant); !reflect.DeepEqual(got, wantDefaults) {
+						t.Fatalf("%s defaults = %#v, want %#v", variant, got, wantDefaults)
+					}
+				}
+			}
+		})
+	}
+}
+
+func fieldByName(fields []FieldSpec, name string) FieldSpec {
+	for _, field := range fields {
+		if field.Name == name {
+			return field
+		}
+	}
+	return FieldSpec{}
+}
+
+func variantNames(variants []VariantSpec) []string {
+	names := make([]string, 0, len(variants))
+	for _, variant := range variants {
+		names = append(names, variant.Name)
+	}
+	return names
+}
+
+func variantDefaults(variants []VariantSpec, name string) map[string]string {
+	for _, variant := range variants {
+		if variant.Name == name {
+			return variant.Defaults
+		}
+	}
+	return nil
+}
+
+func fieldNames(fields []FieldSpec) []string {
+	names := make([]string, 0, len(fields))
+	for _, field := range fields {
+		names = append(names, field.Name)
+	}
+	return names
+}

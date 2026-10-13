@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>大模型的食量 · 动态版</title>
+<style>
+/* 动态信息图：由 epic-infographics/scripts/animate.mjs 逐帧 scrub 后合成 MP4/GIF。
+   时间线：标题 0–0.6s → 台阶错峰生长 0.6–2.4s → 倍数标注 2.4–3.0s → 停留 1s。 */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1420px;overflow:hidden}
+body{background:#f7f4ec;color:#14110c;font-family:'Noto Sans SC',sans-serif;-webkit-font-smoothing:antialiased;
+  padding:64px 84px 48px;display:flex;flex-direction:column}
+.kicker{font-size:21px;font-weight:700;letter-spacing:.22em;color:#8a7f6d;animation:fadeUp .5s ease-out both}
+h1{font-family:'Noto Serif SC',serif;font-size:92px;font-weight:700;line-height:1.06;margin:20px 0 0;animation:fadeUp .6s .15s ease-out both}
+h1 em{font-style:normal;color:#b23c17}
+.lede{font-size:27px;line-height:1.6;color:#4a4237;margin-top:20px;max-width:32ch;animation:fadeUp .6s .35s ease-out both}
+.rule{height:3px;background:#14110c;margin:28px 0 0;transform-origin:left;animation:grow .5s .5s ease-out both}
+.chart{flex:1;display:flex;align-items:flex-end;position:relative;margin-top:10px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+/* 台阶生长：transform-origin 在底部 */
+.bar{transform-origin:center bottom;transform-box:fill-box;animation:growBar .75s cubic-bezier(.2,.8,.2,1) both}
+.b1{animation-delay:.6s}.b2{animation-delay:.85s}.b3{animation-delay:1.1s}.b4{animation-delay:1.35s}
+.lab{animation:fadeUp .5s ease-out both}
+.l1{animation-delay:.75s}.l2{animation-delay:1.0s}.l3{animation-delay:1.25s}.l4{animation-delay:1.5s}
+.callout{animation:pop .5s 2.4s cubic-bezier(.2,1.3,.4,1) both}
+.foot{animation:fadeUp .6s 2.7s ease-out both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes growBar{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes pop{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+.foot{margin-top:20px;border-top:1px solid #cfc6b4;padding-top:18px;display:flex;justify-content:space-between;gap:36px;align-items:flex-end}
+.foot p{font-size:18px;line-height:1.5;color:#6c6252}
+.foot .src{font-size:18px;color:#8a7f6d;text-align:right;white-space:nowrap}
+</style>
+</head>
+<body>
+  <div class="kicker">SCALE · 大模型参数量 · 2018–2023</div>
+  <h1 data-hero>六年，涨了 <em>1.5 万倍</em></h1>
+  <p class="lede">柱子按<strong>对数刻度</strong>画：每高出一格，参数量就是十倍。</p>
+  <div class="rule"></div>
+
+  <div class="chart">
+  <svg viewBox="0 0 912 900" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="layers" width="10" height="10" patternUnits="userSpaceOnUse">
+        <line x1="0" y1="9.5" x2="10" y2="9.5" stroke="rgba(255,255,255,.28)" stroke-width="1.6"/>
+      </pattern>
+    </defs>
+
+    <!-- 刻度：h=(log10-7.5)/5*760，基线 y=830 → 100M:754 · 1B:602 · 10B:450 · 100B:298 · 1T:146 -->
+    <g stroke="#ddd4c2" stroke-width="1.5">
+      <line x1="96" y1="754" x2="912" y2="754"/>
+      <line x1="96" y1="602" x2="912" y2="602"/>
+      <line x1="96" y1="450" x2="912" y2="450"/>
+      <line x1="96" y1="298" x2="912" y2="298"/>
+      <line x1="96" y1="146" x2="912" y2="146"/>
+    </g>
+    <g font-family="'Noto Sans SC'" font-size="18" fill="#a99e8b">
+      <text x="6" y="748">100M</text><text x="6" y="596">1B</text><text x="6" y="444">10B</text>
+      <text x="6" y="292">100B</text><text x="6" y="140">1T</text>
+    </g>
+    <line x1="96" y1="830" x2="912" y2="830" stroke="#14110c" stroke-width="3"/>
+
+    <!-- 台阶：x=90+i*206，宽 164，高度见 brief 的对数映射 -->
+    <g class="bar b1"><rect x="90" y="744" width="164" height="86" rx="6" fill="#3f4a6b"/><rect x="90" y="744" width="164" height="86" rx="6" fill="url(#layers)"/></g>
+    <g class="bar b2"><rect x="296" y="574" width="164" height="256" rx="6" fill="#2f5f8f"/><rect x="296" y="574" width="164" height="256" rx="6" fill="url(#layers)"/></g>
+    <g class="bar b3"><rect x="502" y="258" width="164" height="572" rx="6" fill="#1f4bd8"/><rect x="502" y="258" width="164" height="572" rx="6" fill="url(#layers)"/></g>
+    <g class="bar b4"><rect x="708" y="94" width="164" height="736" rx="6" fill="#b23c17"/><rect x="708" y="94" width="164" height="736" rx="6" fill="url(#layers)"/></g>
+
+    <g class="lab l1"><text x="90" y="714" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#14110c">117M</text><text x="90" y="686" font-size="19" fill="#6c6252">GPT-1 · 2018</text></g>
+    <g class="lab l2"><text x="296" y="544" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#14110c">1.5B</text><text x="296" y="516" font-size="19" fill="#6c6252">GPT-2 · 2019</text></g>
+    <g class="lab l3"><text x="502" y="228" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#14110c">175B</text><text x="502" y="200" font-size="19" fill="#6c6252">GPT-3 · 2020</text></g>
+    <g class="lab l4"><text x="708" y="64" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#b23c17">~1.8T</text><text x="708" y="36" font-size="19" fill="#6c6252">GPT-4 · 2023*</text></g>
+
+    <g class="callout">
+      <rect x="330" y="404" width="266" height="48" rx="24" fill="#14110c"/>
+      <text x="463" y="436" font-size="22" font-weight="700" fill="#f7f4ec" text-anchor="middle">× 15385 ≈ 1.5 万倍</text>
+    </g>
+  </svg>
+  </div>
+
+  <div class="foot">
+    <p>纵轴为<strong>对数刻度</strong>（每格 = 10 倍）。* GPT-4 参数量未公开，~1.8T 为业界流传估计值。</p>
+    <div class="src">数据来源：OpenAI 各代技术报告 / 论文<br>动画：CSS keyframes + 逐帧渲染</div>
+  </div>
+</body>
+</html>

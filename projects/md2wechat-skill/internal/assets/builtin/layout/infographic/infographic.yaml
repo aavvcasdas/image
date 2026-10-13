@@ -1,0 +1,301 @@
+schema_version: "1"
+name: infographic
+lifecycle: recommended
+body_format: fields
+version: "1.0.0"
+since: "1.5.0"
+category: infographic
+input_positions: [body-kv]
+serves: [attention, memorability]
+content_types: [opinion, tutorial, report, announcement, product-launch]
+industry: [general]
+tags: [infographic, visual, statement, data, flow, contrast]
+position: body
+when_to_use: |
+  把一个判断、金句、数字、路径或冲突做成文字视觉摘要。
+  适合需要让读者记住一个核心观点的场景。
+when_not_to_use: |
+  信息超过一个核心点时拆成多个模块；
+  纯数据展示用 metrics；多项对比用 compare。
+pairs_well_with: [hero, verdict, metrics, compare]
+avoid_combining_with: []
+anti_pattern: |
+  缺少 title 导致渲染失败；
+  number 缺少 value、path 少于 2 项会回退 thesis；
+  contrast 缺少 left 或 right、formula 少于 2 项会回退 thesis；
+  title 中 |关键词| 超过 3 个高亮片段。
+fields:
+  required:
+    - name: title
+      description: 核心判断或主标题，支持 |关键词| 高亮（最多 3 个片段）
+      example: "让|重点|先被看到"
+  optional:
+    - name: type
+      description: 信息卡结构类型
+      enum: [thesis, pullquote, number, path, contrast, formula, anatomy, diagnosis, tradeoff, evidence-chain, micro-case]
+      default: thesis
+      example: thesis
+    - name: eyebrow
+      description: 标签词，定位信息图的角色
+      default: 文章信息图
+      example: "视觉摘要"
+    - name: subtitle
+      description: 副标题，补充 title 的说明
+      example: "信息图不放图片，不堆编号，只把读者应该记住的话排得更清楚"
+    - name: quote
+      description: 金句，用于 quote 类型或 statement 类型的引用
+      example: "好的信息图只讲一个判断"
+    - name: value
+      description: 核心数值，用于 data 类型（缺失时回退 statement）
+      example: "-42%"
+    - name: label
+      description: 数值标签，配合 value 使用
+      example: "制作负担"
+    - name: left
+      description: 对比左侧，用于 contrast 类型（缺失时回退 statement）
+      example: "手工堆样式"
+    - name: right
+      description: 对比右侧，用于 contrast 类型（缺失时回退 statement）
+      example: "统一模块骨架"
+    - name: note
+      description: 底部说明
+      example: "适合教程、方案和发布稿"
+    - name: accent
+      description: 强调色控制
+      enum: [green, emerald, blue, sky, orange, amber, red, rose, "#RGB", "#RRGGBB"]
+      default: theme-derived
+    - name: items
+      description: 列表项，用 | 分隔
+      example: "第一点 | 第二点 | 第三点"
+    - name: formula
+      description: 公式项，用 + 分隔
+      example: "判断 + 证据 + 行动"
+    - name: tradeoffs
+      description: 取舍项，格式为 标签:值 并用 | 分隔
+      example: "选择更多:更像自己 | 结构更稳:更少返工"
+  compatibility:
+    - name: variant
+      description: 旧版视觉变体（兼容输入）
+      example: "centered"
+    - name: layout
+      description: 旧版布局控制（兼容输入）
+      example: "default"
+variants:
+  - name: thesis
+    aliases: [statement, judgment, claim]
+    use_when: 需要突出单一主判断
+    required: [title]
+  - name: formula
+    aliases: [equation]
+    use_when: 需要表达可记忆公式
+    required: [title, formula]
+    shapes:
+      - {field: formula, separator: "+", min_parts: 2}
+    example: |
+      :::infographic
+      type: formula
+      title: 让读者愿意读完，需要三个动作
+      formula: 判断 + 证据 + 行动
+      :::
+  - name: pullquote
+    aliases: [quote, saying, golden, golden-quote]
+    use_when: 需要突出一句金句
+    required: [title]
+    example: |
+      :::infographic
+      type: pullquote
+      title: 好排版让判断被记住
+      quote: 主题负责气质，模块负责说服力。
+      :::
+  - name: contrast
+    aliases: [compare, comparison, vs]
+    use_when: 需要并列关键差异
+    required: [title, left, right]
+    example: |
+      :::infographic
+      type: contrast
+      title: 真正的升级，是从排样式变成补表达
+      left: 手工堆样式
+      right: Agent 补结构
+      :::
+  - name: diagnosis
+    aliases: [diagnose, problem]
+    use_when: 需要列出待解决问题
+    required: [title, items]
+    shapes:
+      - {field: items, separator: "|", min_parts: 2}
+    example: |
+      :::infographic
+      type: diagnosis
+      title: 如果文章有这三个问题，就需要高级化
+      items: 开头没有判断 | 中段没有记忆点 | 结尾没有行动
+      :::
+  - name: number
+    aliases: [data, metric, stat]
+    use_when: 需要突出单个关键数字
+    required: [title, value]
+    example: |
+      :::infographic
+      type: number
+      title: 先让客户看到一版能发布的高级稿
+      value: 30min
+      label: 首版可见
+      :::
+  - name: path
+    aliases: [flow, logic, chain]
+    use_when: 需要压缩关键路径
+    required: [title, items]
+    shapes:
+      - {field: items, separator: "|", min_parts: 2}
+    example: |
+      :::infographic
+      type: path
+      title: 从草稿到可发布，不再靠手工堆样式
+      items: 识别内容任务 | 补齐高级模块 | 输出微信 HTML
+      :::
+  - name: anatomy
+    aliases: [breakdown, deconstruct]
+    use_when: 需要拆解结果组成
+    required: [title, items]
+    shapes:
+      - {field: items, separator: "|", min_parts: 2}
+    example: |
+      :::infographic
+      type: anatomy
+      title: 一篇能发布的高级稿，至少要有三层骨架
+      items: 第一屏判断 | 中段证据 | 结尾行动
+      :::
+  - name: tradeoff
+    aliases: [trade-off, tradeoffs]
+    use_when: 需要说明方案取舍
+    required: [title, tradeoffs]
+    shapes:
+      - {field: tradeoffs, separator: "|", min_parts: 2, item_separator: ":", item_min_parts: 2}
+    example: |
+      :::infographic
+      type: tradeoff
+      title: 高级排版要控制选择
+      tradeoffs: 选择更多:更像自己 | 结构更稳:更少返工
+      :::
+  - name: evidence-chain
+    aliases: [evidence, proof-chain]
+    use_when: 需要排列证据顺序
+    required: [title, items]
+    shapes:
+      - {field: items, separator: "|", min_parts: 2}
+    example: |
+      :::infographic
+      type: evidence-chain
+      title: 读者相信的是顺畅证据
+      items: 先给结论 | 再给数据 | 最后给案例
+      :::
+  - name: micro-case
+    aliases: [mini-case, case]
+    use_when: 需要压缩一个微案例
+    required: [title, items]
+    shapes:
+      - {field: items, separator: "|", min_parts: 2}
+    example: |
+      :::infographic
+      type: micro-case
+      title: 一篇草稿如何变成可发布稿
+      items: 原稿没有结构 | 补齐判断与证据 | 完成发布检查
+      :::
+example: |
+  :::infographic
+  eyebrow: 核心判断
+  title: 高级排版不是装饰，是阅读决策系统
+  subtitle: 它先帮读者判断值不值得看，再帮作者建立记忆点
+  :::
+agent_contract:
+  body_format: fields
+  required:
+    - title
+  optional:
+    - type
+    - eyebrow
+    - subtitle
+    - quote
+    - value
+    - label
+    - items
+    - left
+    - right
+    - formula
+    - tradeoffs
+    - note
+    - accent
+  enums:
+    type:
+      - thesis
+      - pullquote
+      - number
+      - path
+      - contrast
+      - formula
+      - anatomy
+      - diagnosis
+      - tradeoff
+      - evidence-chain
+      - micro-case
+    accent:
+      - green
+      - emerald
+      - blue
+      - sky
+      - orange
+      - amber
+      - red
+      - rose
+      - "#RGB"
+      - "#RRGGBB"
+  defaults:
+    type: thesis
+    eyebrow: 文章信息图
+    accent: theme-derived
+    caps: title22,eyebrow10,subtitle30,quote28,value12,label14,item16,formula4x10,tradeoff4x8x10,note20,highlight3
+  invalid:
+    - blank-title
+  ignored:
+    - image
+    - alt
+    - serial
+    - unknown-fields
+  legacy:
+    - variant-selector
+    - layout-selector
+    - flow-to-items
+    - statement-to-thesis
+    - judgment-to-thesis
+    - claim-to-thesis
+    - quote-to-pullquote
+    - saying-to-pullquote
+    - golden-to-pullquote
+    - golden-quote-to-pullquote
+    - data-to-number
+    - metric-to-number
+    - stat-to-number
+    - type-flow-to-path
+    - logic-to-path
+    - chain-to-path
+    - compare-to-contrast
+    - comparison-to-contrast
+    - vs-to-contrast
+    - equation-to-formula
+    - breakdown-to-anatomy
+    - deconstruct-to-anatomy
+    - diagnose-to-diagnosis
+    - problem-to-diagnosis
+    - trade-off-to-tradeoff
+    - tradeoffs-to-tradeoff
+    - evidence-to-evidence-chain
+    - proof-chain-to-evidence-chain
+    - case-to-micro-case
+    - mini-case-to-micro-case
+    - case-folded-selector
+    - case-folded-accent
+  applicability: {}
+metadata:
+  author: md2wechat
+  provenance: builtin
+  inspired_by: "advanced-layout-modules-guide.md#infographic"
