@@ -91,7 +91,7 @@ data
 ## 三个能立刻上手的动作
 
 ```infographic
-infographic list-grid-done-list
+infographic list-grid-compact-card
 theme
   colorPrimary #3b82f6
   colorBg #0f172a

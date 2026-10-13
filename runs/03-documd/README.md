@@ -17,7 +17,7 @@
 | 文件 | 说明 |
 |---|---|
 | `article.md` | 一篇完整科普长文，4 个图全部写在 Markdown 围栏里 |
-| `figures/article-0{1,2,4}-infographic.png` | Infographic 引擎：`sequence-steps-simple` / `hierarchy-tree` / `list-grid-done-list` |
+| `figures/article-0{1,2,4}-infographic.png` | Infographic 引擎：`sequence-steps-simple` / `hierarchy-tree` / `list-grid-compact-card` |
 | `figures/article-03-echarts.png` | ECharts 引擎：双系列柱状图 |
 | `article-full.png` | 整篇长图（`--format png`） |
 | `article.html` | 图文一体 HTML |
@@ -45,4 +45,9 @@ npx documd runs/03-documd/article.md runs/03-documd/article.html --chrome /tmp/c
    → 中文对比关系改用 `hierarchy-tree`（根 + 子节点），效果稳定。
 5. **ECharts 里的中文必须声明字体**。加 `"textStyle": { "fontFamily": "Noto Sans SC" }`，
    否则中文标题、图例、轴标签全部渲染成空白。
-6. `sequence-*` 模板在高宽比上会被**裁掉底部**，`desc` 超过一行就看不见了 → 文案要压到一行以内。
+6. **`list-grid-done-list` 模板的 `desc` 不渲染**（只出图标 + label，长图底部还会被裁）。
+   换成 `list-grid-compact-card` 后 label + desc 都正常显示。
+7. `sequence-*` 模板在高宽比上会被**裁掉底部**，`desc` 超过一行就看不见了 → 文案要压到一行以内。
+8. **ECharts 的 `backgroundColor` 只在「导出图表」路径生效**：导出成独立 PNG 时是深色底（文字清晰），
+   但嵌进 `--format png/html` 的整篇渲染时，容器会套用文档主题的白底，而 spec 里的浅色文字
+   （`#94a3b8`）留在白底上就发灰。**发布用的独立图表没问题**，整篇长图仅供快速预览。
