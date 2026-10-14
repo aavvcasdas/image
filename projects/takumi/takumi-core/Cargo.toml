@@ -1,0 +1,156 @@
+[package]
+name = "takumi-core"
+version = "0.28.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Backend-agnostic layout, style, and resource core for takumi."
+repository = "https://github.com/kane50613/takumi"
+readme = "README.md"
+rust-version = "1.91"
+
+# `serde_bytes` is used via `#[serde(with = "serde_bytes")]`, which cargo-machete can't see.
+[package.metadata.cargo-machete]
+ignored = ["serde_bytes"]
+
+[dependencies]
+log.workspace = true
+data-url.workspace = true
+color.workspace = true
+serde_bytes.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true
+typed-builder.workspace = true
+skrifa.workspace = true
+xxhash-rust.workspace = true
+quick_cache.workspace = true
+smallvec.workspace = true
+parley.workspace = true
+taffy.workspace = true
+bitflags.workspace = true
+cssparser.workspace = true
+kurbo.workspace = true
+pastey.workspace = true
+phf.workspace = true
+precomputed-hash.workspace = true
+selectors.workspace = true
+thin-vec.workspace = true
+rustc-hash.workspace = true
+
+[dependencies.gif]
+workspace = true
+optional = true
+
+[dependencies.image-webp]
+workspace = true
+optional = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.libwebp-sys]
+workspace = true
+optional = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.bytemuck]
+workspace = true
+features = ["wasm_simd", "derive"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.bytemuck]
+workspace = true
+features = ["aarch64_simd", "avx512_simd", "derive"]
+
+[dependencies.serde]
+workspace = true
+features = ["rc"]
+
+[dependencies.image]
+workspace = true
+
+[dependencies.imagesize]
+workspace = true
+features = ["png", "jpeg", "webp", "gif"]
+
+[dependencies.png]
+workspace = true
+optional = true
+
+[dependencies.rayon]
+workspace = true
+optional = true
+
+[dependencies.roxmltree]
+workspace = true
+optional = true
+
+[dependencies.svgtypes]
+workspace = true
+optional = true
+
+[dependencies.simplecss]
+workspace = true
+optional = true
+
+[dependencies.siphasher]
+workspace = true
+optional = true
+
+[dependencies.strict-num]
+workspace = true
+optional = true
+
+
+[dependencies.tiny-skia-path]
+workspace = true
+optional = true
+
+[dependencies.harfrust]
+workspace = true
+optional = true
+
+[dependencies.icu_properties]
+workspace = true
+optional = true
+
+[dependencies.unicode-bidi]
+workspace = true
+optional = true
+
+[dependencies.wuff]
+workspace = true
+optional = true
+
+[features]
+default = ["woff2", "woff", "svg", "image-decoding"]
+image-decoding = ["png", "jpeg", "webp", "gif"]
+png = ["dep:png", "image/png"]
+jpeg = ["image/jpeg"]
+webp = ["dep:image-webp", "dep:libwebp-sys", "image/webp"]
+gif = ["dep:gif", "image/gif"]
+svg-sizing = ["dep:roxmltree", "dep:svgtypes"]
+svg = [
+  "svg-sizing",
+  "dep:simplecss",
+  "dep:siphasher",
+  "dep:strict-num",
+  "dep:tiny-skia-path",
+  "dep:harfrust",
+  "dep:icu_properties",
+  "dep:unicode-bidi",
+]
+woff2 = ["dep:wuff", "wuff/brotli"]
+woff = ["dep:wuff", "wuff/z"]
+rayon = ["dep:rayon"]
+# The paint tree: what the backends paint, as data. Off by default; `takumi-paint` turns it on.
+paint-tree = []
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[dev-dependencies.unicode-bidi]
+workspace = true
+features = ["hardcoded-data"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+

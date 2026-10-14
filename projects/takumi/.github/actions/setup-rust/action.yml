@@ -1,0 +1,46 @@
+name: Setup Rust
+description: Setup Rust toolchain, cache, and install cargo-binstall
+
+inputs:
+  binstall:
+    description: Install cargo-binstall
+    required: false
+  toolchain:
+    description: Rust toolchain to install
+    required: false
+    default: stable
+  targets:
+    description: Targets to install
+    required: false
+  components:
+    description: Components to install
+    required: false
+  stage:
+    description: Stage of the action
+    required: true
+    type: choice
+    options:
+      - test
+      - build
+      - publish
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        prefix-key: rust-${{ inputs.stage }}
+
+    - name: Install cargo-binstall
+      if: ${{ inputs.binstall }}
+      uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+      with:
+        tool: ${{ inputs.binstall }}

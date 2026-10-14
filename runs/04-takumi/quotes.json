@@ -1,0 +1,64 @@
+{
+  "width": 1242,
+  "height": 1656,
+  "theme": "warm-paper",
+  "cards": [
+    {
+      "slug": "cover-photo",
+      "theme": "photo-bottom",
+      "hint": "情绪自救",
+      "quote": "停止内耗的第 30 天\n我重新拿回了生活的掌控感",
+      "source": "慢下来 · 日课 001",
+      "bg": "01-morning-window.png"
+    },
+    {
+      "slug": "cover-lake",
+      "theme": "photo-bottom",
+      "hint": "写给累了的你",
+      "quote": "允许自己休息\n是恢复的第一步",
+      "source": "慢下来 · 日课 002",
+      "bg": "03-quiet-lake.png"
+    },
+    {
+      "slug": "quote-1",
+      "theme": "night-ink",
+      "hint": "夜读",
+      "quote": "你不是懒\n你只是累了",
+      "source": "慢下来 · 日课 003"
+    },
+    {
+      "slug": "quote-2",
+      "theme": "warm-paper",
+      "hint": "今天也要好好过",
+      "quote": "把「必须」换成「可以」\n语言一变，压力就松了一半",
+      "source": "慢下来 · 日课 004"
+    },
+    {
+      "slug": "quote-3",
+      "theme": "night-ink",
+      "hint": "晚安",
+      "quote": "每天做一件\n微小而确定的事",
+      "source": "慢下来 · 日课 005"
+    },
+    {
+      "slug": "quote-4",
+      "theme": "photo-bottom",
+      "hint": "给未来的自己",
+      "quote": "慢一点\n也是一种前进",
+      "source": "慢下来 · 日课 006",
+      "bg": "04-night-city-window.png"
+    }
+  ],
+  "animation": {
+    "hint": "情绪自救",
+    "lines": [
+      "你不是懒",
+      "你只是累了",
+      "允许自己休息\n是恢复的第一步"
+    ],
+    "theme": "night-ink",
+    "sceneMs": 1500,
+    "fps": 20,
+    "format": "gif"
+  }
+}

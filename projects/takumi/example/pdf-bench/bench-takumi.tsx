@@ -1,0 +1,47 @@
+import type { RenderOptions } from "takumi-pdf";
+import { interFonts } from "./fonts";
+import { benchmark } from "./harness";
+import { items, total } from "./invoice-data";
+
+const fonts = await interFonts();
+const fontData = [await Bun.file(fonts.regular).bytes(), await Bun.file(fonts.bold).bytes()];
+
+const t0 = performance.now();
+const { render } = await import("takumi-pdf");
+
+function Invoice() {
+  return (
+    <main tw="flex flex-col text-[13px] text-gray-900">
+      <div tw="flex justify-between border-b border-gray-300 pb-4 mb-4">
+        <h1 tw="m-0 text-2xl font-bold">Invoice INV-2026-001</h1>
+        <p tw="m-0">Due August 31, 2026</p>
+      </div>
+      <div tw="flex flex-col">
+        {items.map((item, i) => (
+          <div key={i} tw="flex py-1" style={{ breakInside: "avoid" }}>
+            <span tw="flex-1 pr-4">{item.description}</span>
+            <span tw="w-8 text-right">{item.qty}</span>
+            <span tw="w-[90px] text-right">${(item.qty * item.unit).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+      <div tw="flex justify-between border-t border-gray-300 mt-4 pt-2 font-bold">
+        <span>Total</span>
+        <span>${total.toFixed(2)}</span>
+      </div>
+    </main>
+  );
+}
+
+const options: RenderOptions = {
+  size: "a4",
+  fonts: fontData,
+  fontFamilies: ["Inter"],
+  footer: (
+    <div tw="flex w-full justify-center text-[10px] text-gray-500">
+      Page <span className="pageNumber" /> of <span className="totalPages" />
+    </div>
+  ),
+};
+
+await benchmark("takumi-pdf", t0, () => render(<Invoice />, options), "out-takumi.pdf");

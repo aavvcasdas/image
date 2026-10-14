@@ -1,0 +1,21 @@
+{
+  "name": "example-css-library-integration",
+  "private": true,
+  "type": "module",
+  "module": "src/index.tsx",
+  "scripts": {
+    "render": "bun ./src/index.tsx"
+  },
+  "dependencies": {
+    "lucide-react": "catalog:",
+    "react": "catalog:",
+    "takumi-js": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "tailwindcss": "^4.3.3",
+    "typescript": "catalog:",
+    "unocss": "^66.10.0"
+  }
+}

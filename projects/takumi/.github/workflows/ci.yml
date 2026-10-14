@@ -1,0 +1,1159 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  MACOSX_DEPLOYMENT_TARGET: "10.13"
+  # Remove file paths to reduce binary size
+  RUSTFLAGS: >-
+    --remap-path-prefix=/home/runner=~
+    --remap-path-prefix=/Users/runner=~
+    --remap-path-prefix=/root=~
+    --remap-path-prefix=$HOME/.cargo/registry=~/.cargo/registry
+    --remap-path-prefix=$HOME/.rustup=~/.rustup
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Jobs are grouped by package
+jobs:
+  lint-and-format:
+    name: Lint and Format
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun lint
+
+      - run: bun knip
+
+  test-rust:
+    name: Rust Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          binstall: cargo-audit,cargo-deny,cargo-llvm-cov,cargo-rdme@1.5.1,cargo-machete
+          components: rustfmt,clippy
+          targets: wasm32-unknown-unknown
+          stage: test
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check unused dependencies
+        run: cargo machete
+
+      - name: Check dependency sources and duplicates
+        run: cargo deny --locked check bans sources
+
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      # The host pass never sees the `target_arch = "wasm32"` half of the
+      # decoders, so it is blind to whatever the published wasm compiles.
+      - name: Run Clippy for wasm
+        run: cargo clippy --locked --target wasm32-unknown-unknown -p takumi-wasm -p takumi-pdf-wasm -p takumi-paint-wasm -- -D warnings
+
+      # Alone, so feature unification with the other wasm crates cannot hide
+      # what the paint build compiles.
+      - name: Run Clippy for the paint build
+        run: cargo clippy --locked --target wasm32-unknown-unknown -p takumi-paint-wasm -- -D warnings
+
+      - name: Test README.md is up to date
+        run: |
+          fail=0
+          while read -r dir; do
+            (cd "$dir" && cargo rdme --check) || fail=1
+          done < <(cargo metadata --locked --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | .manifest_path | rtrimstr("/Cargo.toml")')
+          exit $fail
+
+      - name: Run tests
+        run: cargo test --locked
+
+      # The fixtures claim PDF/A and PDF/UA conformance in their metadata. Only
+      # the reference validator can tell whether the claim holds.
+      # Pinned to one release, so a new veraPDF changes what CI validates only
+      # when someone bumps it. The checksum guards the file behind the URL.
+      - name: Install veraPDF
+        env:
+          VERAPDF_VERSION: 1.30.3
+          VERAPDF_SHA256: b512bf24945503a33fc10738ecffc1f2dccaaf8593a448e94ee9ac86a9559a59
+        run: |
+          curl -sfL -o verapdf-installer.zip "https://software.verapdf.org/rel/${VERAPDF_VERSION%.*}/verapdf-greenfield-$VERAPDF_VERSION-installer.zip"
+          echo "$VERAPDF_SHA256  verapdf-installer.zip" | sha256sum -c -
+          unzip -q verapdf-installer.zip
+          cat > auto-install.xml <<XML
+          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+          <AutomatedInstallation langpack="eng">
+            <com.izforge.izpack.panels.htmlhello.HTMLHelloPanel id="welcome"/>
+            <com.izforge.izpack.panels.target.TargetPanel id="install_dir">
+              <installpath>$PWD/verapdf</installpath>
+            </com.izforge.izpack.panels.target.TargetPanel>
+            <com.izforge.izpack.panels.packs.PacksPanel id="sdk_pack_select">
+              <pack index="0" name="veraPDF GUI" selected="true"/>
+              <pack index="1" name="veraPDF Mac and *nix Scripts" selected="true"/>
+            </com.izforge.izpack.panels.packs.PacksPanel>
+            <com.izforge.izpack.panels.install.InstallPanel id="install"/>
+            <com.izforge.izpack.panels.finish.FinishPanel id="finish"/>
+          </AutomatedInstallation>
+          XML
+          java -jar verapdf-greenfield-*/verapdf-izpack-installer-*.jar auto-install.xml
+
+      - name: Validate PDF conformance
+        run: |
+          fail=0
+          checked=0
+          # One veraPDF run per flavour, not per file: starting the JVM costs
+          # more than the validation it then performs.
+          for flavour in 0 ua1 ua2; do
+            case $flavour in
+              0) claim="pdfaid:part" ;;
+              ua1) claim="<pdfuaid:part>1</pdfuaid:part>" ;;
+              ua2) claim="<pdfuaid:part>2</pdfuaid:part>" ;;
+            esac
+            files=()
+            for pdf in takumi-pdf/tests/fixtures-generated/*.pdf; do
+              if grep -qa "$claim" "$pdf"; then
+                files+=("$pdf")
+              fi
+            done
+            if [ ${#files[@]} -gt 0 ]; then
+              ./verapdf/verapdf --flavour "$flavour" --format text "${files[@]}" || fail=1
+              checked=$((checked + ${#files[@]}))
+            fi
+          done
+          echo "validated $checked conformance claims"
+          # A rename or a lost fixture would otherwise leave this step green
+          # with nothing to validate.
+          if [ "$checked" -lt 15 ]; then
+            echo "too few conformance claims to validate" >&2
+            fail=1
+          fi
+          exit $fail
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Format generated fixtures
+        run: bunx oxfmt --write takumi/tests/fixtures-generated
+
+      - name: Check for git changes and prepare artifact
+        id: check_changes
+        run: |
+          if git diff --quiet HEAD; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            git diff --name-only HEAD > changed_files.txt
+            tar czf changed_files.tar.gz $(cat changed_files.txt)
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload changed files artifact
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: changed-files
+          path: changed_files.tar.gz
+          if-no-files-found: error
+
+      - name: Fail if files were changed
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          echo "Error: Generated files were modified during build:"
+          echo ""
+          cat changed_files.txt
+          exit 1
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Test Publish (--dry-run)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: cargo publish --locked --dry-run --workspace
+
+  build-helpers:
+    name: Build @takumi-rs/helpers
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-helpers
+
+      - name: Test
+        working-directory: takumi-helpers
+        run: bun test
+
+      - name: Build helpers
+        working-directory: takumi-helpers
+        run: bun run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+          if-no-files-found: error
+
+  build-and-test-napi:
+    needs: build-helpers
+    strategy:
+      fail-fast: false
+      # A pull request builds only the target the rest of the pipeline consumes.
+      # The other seven take longer than every other job put together, and
+      # nothing downstream reads them until master publishes.
+      # `--use-napi-cross` pins libc at 2.31 on the gnu targets (cross-rs docs).
+      matrix:
+        settings: >-
+          ${{ github.event_name == 'pull_request'
+          && fromJSON('[
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu", "build": "bun run build --target x86_64-unknown-linux-gnu --use-napi-cross"}
+          ]')
+          || fromJSON('[
+          {"host": "windows-2025", "target": "x86_64-pc-windows-msvc", "build": "bun run build --target x86_64-pc-windows-msvc"},
+          {"host": "windows-11-arm", "target": "aarch64-pc-windows-msvc", "build": "bun run build --target aarch64-pc-windows-msvc"},
+          {"host": "macos-15", "target": "aarch64-apple-darwin", "build": "bun run build --target aarch64-apple-darwin"},
+          {"host": "macos-15-intel", "target": "x86_64-apple-darwin", "build": "bun run build --target x86_64-apple-darwin"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "build": "bun run build --target aarch64-unknown-linux-gnu --use-napi-cross"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-musl", "build": "bun run build --target aarch64-unknown-linux-musl -x"},
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu", "build": "bun run build --target x86_64-unknown-linux-gnu --use-napi-cross"},
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-musl", "build": "bun run build --target x86_64-unknown-linux-musl -x"}
+          ]') }}
+
+    name: Build @takumi-rs/core for ${{ matrix.settings.target }}
+    runs-on: ${{ matrix.settings.host }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          # held below nightly-2026-08-06: LLVM 23 (rust#158734) emits 4% more
+          # instructions per function and costs 33KB gzipped in the wasm bundle
+          toolchain: nightly-2026-08-05
+          targets: ${{ matrix.settings.target }}
+          components: rust-src
+          stage: build
+
+      - name: Install cargo-zigbuild
+        if: ${{ contains(matrix.settings.target, 'musl') }}
+        run: pip install cargo-zigbuild
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-napi
+
+      - name: Build
+        working-directory: takumi-napi
+        env:
+          CARGO_UNSTABLE_BUILD_STD: std
+          CARGO_UNSTABLE_BUILD_STD_FEATURES: optimize_for_size
+          # Unwind panics so napi-rs converts panics into catchable JS errors
+          # instead of aborting the host process.
+          CARGO_PROFILE_RELEASE_PANIC: unwind
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options
+        run: ${{ matrix.settings.build }} -- --locked && bun build:js
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: |
+            takumi-napi/dist
+            takumi-napi/core.*.node
+            takumi-napi/index.js
+            takumi-napi/index.d.ts
+          if-no-files-found: error
+
+      - name: Test bindings
+        if: ${{ !contains(matrix.settings.target, 'musl') }}
+        working-directory: takumi-napi
+        run: bun test
+
+      - name: Test bindings in Alpine (musl)
+        if: contains(matrix.settings.target, 'musl')
+        run: |
+          docker run --rm -v $PWD:/workspace -w /workspace/takumi-napi \
+            oven/bun:alpine bun test
+
+  build-js:
+    name: Build takumi-js
+    runs-on: ubuntu-slim
+    needs: [build-helpers, build-and-test-napi, build-wasm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-js
+
+      - name: Build takumi-js
+        working-directory: takumi-js
+        run: bun run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: js-dist
+          path: takumi-js/dist
+          if-no-files-found: error
+
+  test-js:
+    name: Test takumi-js, templates & examples
+    runs-on: ubuntu-slim
+    needs: [build-helpers, build-js, build-and-test-napi, build-wasm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Install dependencies
+        run: >
+          bun install --frozen-lockfile
+          --filter ./takumi-js
+          --filter ./docs
+          --filter ./example/cloudflare-workers
+          --filter ./example/tanstack-start
+          --filter ./example/waku-ssr
+
+      - name: Test takumi-js
+        working-directory: takumi-js
+        run: bun test
+
+      # Renders every registry card and writes the previews the docs embed.
+      - name: Test registry previews
+        working-directory: docs
+        run: bun test tests/registry-previews.test.tsx
+
+      # Runs from the root: the playground's PDF reader pulls in nothing else.
+      - name: Test docs playground
+        run: bun test docs/app/playground
+
+      - name: Test cloudflare-workers example
+        working-directory: example/cloudflare-workers
+        run: bun run test
+
+      - name: Test tanstack-start example
+        working-directory: example/tanstack-start
+        run: bun run test
+
+      - name: Test waku-ssr example
+        working-directory: example/waku-ssr
+        run: bun run test
+
+  build-image-response:
+    name: Build @takumi-rs/image-response
+    runs-on: ubuntu-slim
+    needs: [build-helpers, build-js, build-and-test-napi, build-wasm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-image-response
+
+      - name: Build image-response
+        working-directory: takumi-image-response
+        run: bun run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
+          if-no-files-found: error
+
+  check-packaging:
+    name: Check packaging (attw + publint)
+    runs-on: ubuntu-slim
+    needs:
+      [
+        build-helpers,
+        build-js,
+        build-and-test-napi,
+        build-wasm,
+        build-image-response,
+        build-pdf-wasm,
+        build-paint-wasm,
+      ]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download image-response artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
+
+      - name: Download PDF artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pdf-package
+          path: takumi-pdf-js
+
+      - name: Download paint artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: paint-package
+          path: takumi-paint
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check exports with attw and publint
+        run: bun publish-lint
+
+  build-wasm:
+    name: Build @takumi-rs/wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          # pinned to match build-and-test-napi (see comment there)
+          toolchain: nightly-2026-08-05
+          targets: wasm32-unknown-unknown
+          components: rust-src
+          stage: build
+
+      - name: Install wasm-pack
+        uses: ./.github/actions/setup-wasm-pack
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-wasm
+
+      - name: Build WASM
+        working-directory: takumi-wasm
+        env:
+          CARGO_UNSTABLE_BUILD_STD: std,panic_abort
+          CARGO_UNSTABLE_BUILD_STD_FEATURES: optimize_for_size
+          # setting RUSTFLAGS overrides .cargo/config.toml target rustflags, so
+          # +simd128 must be repeated here or the published wasm loses SIMD
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
+        run: bun run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wasm-package
+          path: |
+            takumi-wasm/pkg/takumi_wasm.d.ts
+            takumi-wasm/pkg/takumi_wasm.js
+            takumi-wasm/pkg/takumi_wasm_bg.wasm
+            takumi-wasm/pkg/takumi_wasm_bg.wasm.d.ts
+            takumi-wasm/dist
+          if-no-files-found: error
+
+  build-pdf-wasm:
+    name: Build takumi-pdf
+    runs-on: ubuntu-latest
+    needs: build-helpers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          # pinned to match build-and-test-napi (see comment there)
+          toolchain: nightly-2026-08-05
+          targets: wasm32-unknown-unknown
+          components: rust-src
+          stage: build
+
+      - name: Install wasm-pack
+        uses: ./.github/actions/setup-wasm-pack
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-pdf-js
+
+      - name: Build takumi-pdf
+        working-directory: takumi-pdf-js
+        env:
+          CARGO_UNSTABLE_BUILD_STD: std,panic_abort
+          CARGO_UNSTABLE_BUILD_STD_FEATURES: optimize_for_size
+          # setting RUSTFLAGS overrides .cargo/config.toml target rustflags, so
+          # +simd128 must be repeated here or the published wasm loses SIMD
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
+        run: bun run build
+
+      # A Worker is capped at 3 MB gzip, and takumi-pdf has to leave room for
+      # the code around it. The ceiling catches a step change, not drift; read
+      # the reported numbers to see where the budget is going.
+      - name: Report wasm size
+        working-directory: takumi-pdf-js
+        env:
+          CEILING_BYTES: 2097152
+        run: |
+          set -eu
+          wasm=pkg/takumi_pdf_wasm_bg.wasm
+          raw=$(wc -c < "$wasm")
+          gz=$(gzip -9 -c "$wasm" | wc -c)
+          {
+            echo "| takumi-pdf wasm | bytes | MiB |"
+            echo "| --- | ---: | ---: |"
+            awk -v raw="$raw" -v gz="$gz" 'BEGIN {
+              printf "| raw | %d | %.2f |\n", raw, raw / 1048576
+              printf "| gzip | %d | %.2f |\n", gz, gz / 1048576
+            }'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$gz" -gt "$CEILING_BYTES" ]; then
+            echo "::error::gzipped wasm is $gz bytes, over the $CEILING_BYTES ceiling"
+            exit 1
+          fi
+
+      - name: Test takumi-pdf
+        working-directory: takumi-pdf-js
+        run: bun test
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pdf-package
+          path: |
+            takumi-pdf-js/pkg/takumi_pdf_wasm.d.ts
+            takumi-pdf-js/pkg/takumi_pdf_wasm.js
+            takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm
+            takumi-pdf-js/pkg/takumi_pdf_wasm_bg.wasm.d.ts
+            takumi-pdf-js/dist
+            takumi-pdf-js/dist
+          if-no-files-found: error
+
+  build-paint-wasm:
+    name: Build takumi-paint
+    runs-on: ubuntu-latest
+    needs: build-helpers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          # pinned to match build-and-test-napi (see comment there)
+          toolchain: nightly-2026-08-05
+          targets: wasm32-unknown-unknown
+          components: rust-src
+          stage: build
+
+      - name: Install wasm-pack
+        uses: ./.github/actions/setup-wasm-pack
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-paint
+
+      - name: Build takumi-paint
+        working-directory: takumi-paint
+        env:
+          CARGO_UNSTABLE_BUILD_STD: std,panic_abort
+          CARGO_UNSTABLE_BUILD_STD_FEATURES: optimize_for_size
+          # setting RUSTFLAGS overrides .cargo/config.toml target rustflags, so
+          # +simd128 must be repeated here or the published wasm loses SIMD
+          RUSTFLAGS: ${{ env.RUSTFLAGS }} -Zunstable-options -Cpanic=immediate-abort -Ctarget-feature=+simd128
+        run: bun run build
+
+      - name: Test takumi-paint
+        working-directory: takumi-paint
+        run: bun test
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paint-package
+          path: |
+            takumi-paint/pkg/takumi_paint_wasm.d.ts
+            takumi-paint/pkg/takumi_paint_wasm.js
+            takumi-paint/pkg/takumi_paint_wasm_bg.wasm
+            takumi-paint/pkg/takumi_paint_wasm_bg.wasm.d.ts
+            takumi-paint/dist
+          if-no-files-found: error
+
+  test-wasm:
+    name: Test @takumi-rs/wasm for ${{ matrix.settings.target }}
+    needs: [build-wasm, build-helpers]
+    strategy:
+      fail-fast: false
+      # The wasm bundle is the same bytes everywhere, so a pull request only
+      # checks that Bun loads it. Master keeps the full host sweep.
+      # arm64 Windows is out for now: it fails too often for no reason.
+      matrix:
+        settings: >-
+          ${{ github.event_name == 'pull_request'
+          && fromJSON('[
+          {"host": "ubuntu-slim", "target": "x86_64-unknown-linux-gnu"}
+          ]')
+          || fromJSON('[
+          {"host": "windows-2025", "target": "x86_64-pc-windows-msvc"},
+          {"host": "macos-15-intel", "target": "x86_64-apple-darwin"},
+          {"host": "macos-15", "target": "aarch64-apple-darwin"},
+          {"host": "ubuntu-slim", "target": "x86_64-unknown-linux-gnu"},
+          {"host": "ubuntu-latest", "target": "x86_64-unknown-linux-musl"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu"},
+          {"host": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-musl"}
+          ]') }}
+    runs-on: ${{ matrix.settings.host }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./takumi-wasm
+
+      - name: Test WASM
+        working-directory: takumi-wasm
+        run: bun test
+
+  preview-packages:
+    name: Publish PR preview packages
+    runs-on: ubuntu-slim
+    needs: pass-test
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download all N-API artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: bindings-*
+          path: takumi-napi/artifacts
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Download image-response artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download PDF artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pdf-package
+          path: takumi-pdf-js
+
+      - name: Download paint artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: paint-package
+          path: takumi-paint
+
+      - name: Publish PR previews
+        run: >
+          bunx pkg-pr-new@latest publish
+          --packageManager=bun
+          ./takumi-helpers
+          ./takumi-napi
+          ./takumi-wasm
+          ./takumi-js
+          ./takumi-image-response
+          ./takumi-pdf-js
+          ./takumi-paint
+
+  pass-test:
+    name: Pass Test
+    runs-on: ubuntu-slim
+    if: always()
+    needs:
+      [
+        lint-and-format,
+        test-rust,
+        test-js,
+        build-image-response,
+        check-packaging,
+        build-and-test-napi,
+        test-wasm,
+        build-pdf-wasm,
+        build-paint-wasm,
+      ]
+    steps:
+      - name: Verify all checks passed
+        if: >-
+          contains(needs.*.result, 'failure')
+          || contains(needs.*.result, 'cancelled')
+          || contains(needs.*.result, 'skipped')
+        run: exit 1
+
+  version-pr:
+    name: Version PR
+    runs-on: ubuntu-slim
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          stage: release
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Draft version PR
+        run: bun tegami version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LEFTHOOK: "0"
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-slim
+    needs: pass-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          stage: release
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download all napi artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: bindings-*
+          path: takumi-napi/artifacts
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi
+
+      - name: Download takumi-js artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Download image-response artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download PDF artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pdf-package
+          path: takumi-pdf-js
+
+      - name: Download paint artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: paint-package
+          path: takumi-paint
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile && echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+
+      # Trusted publishing requires npm 11.5.1; npm 12 breaks it.
+      - name: Update npm version
+        run: bun install -g npm@11
+
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: crates-io-auth
+
+      - name: Publish packages
+        run: bun tegami publish && bun tegami cleanup
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+          NPM_TOKEN: "" # https://github.com/changesets/changesets/issues/1152#issuecomment-3190884868
+          NPM_CONFIG_PROVENANCE: true
+
+  docs-changed:
+    name: Docs changed
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            docs:
+              - "docs/**"
+              - "bun.lock"
+
+  deploy-docs:
+    name: Deploy docs
+    runs-on: ubuntu-slim
+    needs: [pass-test, docs-changed]
+    if: github.ref == 'refs/heads/master' || needs.docs-changed.outputs.docs == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Download helpers artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: helpers-dist
+          path: takumi-helpers/dist
+
+      - name: Download N-API bindings artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: takumi-napi
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package
+          path: takumi-wasm
+
+      - name: Download js-dist artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-dist
+          path: takumi-js/dist
+
+      - name: Download image-response artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: image-response-dist
+          path: takumi-image-response/dist
+
+      - name: Download takumi-pdf artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pdf-package
+          path: takumi-pdf-js
+
+      - name: Download takumi-paint artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: paint-package
+          path: takumi-paint
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --filter ./docs
+
+      # `vercel build` strips types without checking them, so the playground's
+      # own use of the render options is only checked here.
+      - name: Typecheck docs
+        working-directory: docs
+        run: bun run typecheck
+
+      - name: Pull Vercel project settings (preview)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: bunx vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Vercel output (preview)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: bunx vercel build --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
+
+      - name: Deploy to Vercel (preview)
+        id: deploy_preview
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          DEPLOYMENT_URL=$(bunx vercel deploy --archive=tgz --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
+
+      - name: Assign alias (preview)
+        id: assign_alias
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          REF_NAME="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          SAFE_REF=$(echo "${REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9-]+#-#g; s/^-+//; s/-+$//; s/-{2,}/-/g')
+          # Keep the full alias under the 64-char TLS common-name limit (".preview.takumi.kane.tw" is 23 chars).
+          SAFE_REF=${SAFE_REF:0:40}
+          SAFE_REF=$(echo "${SAFE_REF}" | sed -E 's/-+$//')
+          if [ -z "${SAFE_REF}" ]; then
+            SAFE_REF="preview"
+          fi
+
+          PREVIEW_ALIAS="${SAFE_REF}.preview.takumi.kane.tw"
+          bunx vercel alias set ${{ steps.deploy_preview.outputs.url }} "${PREVIEW_ALIAS}" --token=${{ secrets.VERCEL_TOKEN }}
+          echo "alias=${PREVIEW_ALIAS}" >> $GITHUB_OUTPUT
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const prNumber = context.payload.pull_request?.number;
+            if (!prNumber) {
+              core.info("No pull request number in event payload");
+              return;
+            }
+            const marker = "<!-- docs-preview-url -->";
+            const previewUrl = `https://${{ steps.assign_alias.outputs.alias }}`;
+            const body = `${marker}\nDocs preview is ready: ${previewUrl}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated preview comment on PR #${prNumber}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+              core.info(`Created preview comment on PR #${prNumber}`);
+            }
+
+      - name: Pull Vercel project settings (production)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Vercel output (production)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} && rm -rf .vercel/output/functions
+
+      - name: Deploy to Vercel (production)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: bunx vercel deploy --archive=tgz --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

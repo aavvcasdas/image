@@ -1,0 +1,14 @@
+{
+  "rust-analyzer.diagnostics.disabled": ["inactive-code"],
+  "tailwindCSS.classAttributes": ["class", "className", "tw"],
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  }
+}

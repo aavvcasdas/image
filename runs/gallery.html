@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AI 鸡汤 / 涨粉图文 · 代码渲染实测画廊</title>
+<style>
+  :root { color-scheme: light dark; --bg:#0f1117; --card:#171a23; --fg:#e8ecf4; --muted:#9aa4b8; --accent:#ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+  header { padding:36px 28px 12px; }
+  h1 { margin:0 0 8px; font-size:26px; }
+  .sub { color:var(--muted); font-size:14px; line-height:1.7; }
+  .sub code { background:#00000055; padding:2px 6px; border-radius:5px; }
+  section { padding:18px 28px 8px; }
+  h2 { font-size:18px; margin:26px 0 14px; padding-left:12px; border-left:4px solid var(--accent); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; }
+  figure { margin:0; background:var(--card); border-radius:14px; overflow:hidden;
+           box-shadow:0 6px 20px #0006; display:flex; flex-direction:column; }
+  figure img { width:100%; display:block; background:#fff; }
+  figcaption { padding:8px 10px; font-size:12px; color:var(--muted); display:flex; justify-content:space-between; gap:8px; }
+  footer { padding:30px 28px 60px; color:var(--muted); font-size:13px; }
+</style></head>
+<body>
+<header>
+  <h1>AI 鸡汤 / 涨粉图文 · 代码渲染实测画廊</h1>
+  <p class="sub">
+    5 个「不需要 API 接口」的图文创作项目，全部在本仓库实跑产出。<br/>
+    模型生图部分（封面/底图）来自 <strong>Arena 生图</strong>，代码渲染部分完全离线运行；近 3 个月均有更新。<br/>
+    复现命令见 <code>README.md</code> 与各 <code>runs/&lt;编号&gt;/README.md</code>。
+  </p>
+</header>
+<section>
+  <h2>Run 01 · Auto-Redbook-Skills（2358★）多主题小红书卡片 <span style="color:var(--muted);font-weight:400;font-size:13px">（24 张）</span></h2>
+  <div class="grid">
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-botanical/card_1.jpg" alt="out-botanical/card_1.jpg"/>
+      <figcaption><span>out-botanical/card_1.jpg</span><span>188 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-botanical/card_2.jpg" alt="out-botanical/card_2.jpg"/>
+      <figcaption><span>out-botanical/card_2.jpg</span><span>179 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-botanical/card_3.jpg" alt="out-botanical/card_3.jpg"/>
+      <figcaption><span>out-botanical/card_3.jpg</span><span>169 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-botanical/card_4.jpg" alt="out-botanical/card_4.jpg"/>
+      <figcaption><span>out-botanical/card_4.jpg</span><span>174 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-botanical/card_5.jpg" alt="out-botanical/card_5.jpg"/>
+      <figcaption><span>out-botanical/card_5.jpg</span><span>185 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-botanical/cover.png" alt="out-botanical/cover.png"/>
+      <figcaption><span>out-botanical/cover.png</span><span>173 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-default/card_1.png" alt="out-default/card_1.png"/>
+      <figcaption><span>out-default/card_1.png</span><span>197 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-default/card_2.png" alt="out-default/card_2.png"/>
+      <figcaption><span>out-default/card_2.png</span><span>198 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-default/card_3.png" alt="out-default/card_3.png"/>
+      <figcaption><span>out-default/card_3.png</span><span>173 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-default/card_4.png" alt="out-default/card_4.png"/>
+      <figcaption><span>out-default/card_4.png</span><span>178 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-default/card_5.png" alt="out-default/card_5.png"/>
+      <figcaption><span>out-default/card_5.png</span><span>279 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-default/cover.png" alt="out-default/cover.png"/>
+      <figcaption><span>out-default/cover.png</span><span>142 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-playful-geometric/card_1.jpg" alt="out-playful-geometric/card_1.jpg"/>
+      <figcaption><span>out-playful-geometric/card_1.jpg</span><span>273 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-playful-geometric/card_2.jpg" alt="out-playful-geometric/card_2.jpg"/>
+      <figcaption><span>out-playful-geometric/card_2.jpg</span><span>259 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-playful-geometric/card_3.jpg" alt="out-playful-geometric/card_3.jpg"/>
+      <figcaption><span>out-playful-geometric/card_3.jpg</span><span>252 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-playful-geometric/card_4.jpg" alt="out-playful-geometric/card_4.jpg"/>
+      <figcaption><span>out-playful-geometric/card_4.jpg</span><span>250 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-playful-geometric/card_5.jpg" alt="out-playful-geometric/card_5.jpg"/>
+      <figcaption><span>out-playful-geometric/card_5.jpg</span><span>281 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-playful-geometric/cover.png" alt="out-playful-geometric/cover.png"/>
+      <figcaption><span>out-playful-geometric/cover.png</span><span>172 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-sketch/card_1.png" alt="out-sketch/card_1.png"/>
+      <figcaption><span>out-sketch/card_1.png</span><span>302 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-sketch/card_2.png" alt="out-sketch/card_2.png"/>
+      <figcaption><span>out-sketch/card_2.png</span><span>297 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-sketch/card_3.png" alt="out-sketch/card_3.png"/>
+      <figcaption><span>out-sketch/card_3.png</span><span>270 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-sketch/card_4.png" alt="out-sketch/card_4.png"/>
+      <figcaption><span>out-sketch/card_4.png</span><span>279 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-sketch/card_5.png" alt="out-sketch/card_5.png"/>
+      <figcaption><span>out-sketch/card_5.png</span><span>290 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="01-auto-redbook-skill/out-sketch/cover.png" alt="out-sketch/cover.png"/>
+      <figcaption><span>out-sketch/cover.png</span><span>155 KB</span></figcaption></figure>
+  </div>
+</section>
+<section>
+  <h2>Run 02 · XHS-TextCard（107★）三套模板 + Arena 生图封面 <span style="color:var(--muted);font-weight:400;font-size:13px">（23 张）</span></h2>
+  <div class="grid">
+    <figure><img loading="lazy" src="02-xhs-textcard/card_01.jpg" alt="card_01.jpg"/>
+      <figcaption><span>card_01.jpg</span><span>203 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/card_02.jpg" alt="card_02.jpg"/>
+      <figcaption><span>card_02.jpg</span><span>137 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/card_03.jpg" alt="card_03.jpg"/>
+      <figcaption><span>card_03.jpg</span><span>64 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/card_04.jpg" alt="card_04.jpg"/>
+      <figcaption><span>card_04.jpg</span><span>107 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/card_05.jpg" alt="card_05.jpg"/>
+      <figcaption><span>card_05.jpg</span><span>104 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/card_06.jpg" alt="card_06.jpg"/>
+      <figcaption><span>card_06.jpg</span><span>105 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/card_07.jpg" alt="card_07.jpg"/>
+      <figcaption><span>card_07.jpg</span><span>107 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/cinematic-film/film_01.jpg" alt="cinematic-film/film_01.jpg"/>
+      <figcaption><span>cinematic-film/film_01.jpg</span><span>187 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/cinematic-film/film_02.jpg" alt="cinematic-film/film_02.jpg"/>
+      <figcaption><span>cinematic-film/film_02.jpg</span><span>112 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/cinematic-film/film_03.jpg" alt="cinematic-film/film_03.jpg"/>
+      <figcaption><span>cinematic-film/film_03.jpg</span><span>105 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/cinematic-film/film_04.jpg" alt="cinematic-film/film_04.jpg"/>
+      <figcaption><span>cinematic-film/film_04.jpg</span><span>111 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/cinematic-film/film_05.jpg" alt="cinematic-film/film_05.jpg"/>
+      <figcaption><span>cinematic-film/film_05.jpg</span><span>93 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/elegant-book/elegant_01.jpg" alt="elegant-book/elegant_01.jpg"/>
+      <figcaption><span>elegant-book/elegant_01.jpg</span><span>123 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/elegant-book/elegant_02.jpg" alt="elegant-book/elegant_02.jpg"/>
+      <figcaption><span>elegant-book/elegant_02.jpg</span><span>118 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/elegant-book/elegant_03.jpg" alt="elegant-book/elegant_03.jpg"/>
+      <figcaption><span>elegant-book/elegant_03.jpg</span><span>113 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/elegant-book/elegant_04.jpg" alt="elegant-book/elegant_04.jpg"/>
+      <figcaption><span>elegant-book/elegant_04.jpg</span><span>119 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/elegant-book/elegant_05.jpg" alt="elegant-book/elegant_05.jpg"/>
+      <figcaption><span>elegant-book/elegant_05.jpg</span><span>115 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/elegant-book/elegant_06.jpg" alt="elegant-book/elegant_06.jpg"/>
+      <figcaption><span>elegant-book/elegant_06.jpg</span><span>70 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/ios-memo/memo_01.jpg" alt="ios-memo/memo_01.jpg"/>
+      <figcaption><span>ios-memo/memo_01.jpg</span><span>129 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/ios-memo/memo_02.png" alt="ios-memo/memo_02.png"/>
+      <figcaption><span>ios-memo/memo_02.png</span><span>189 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/ios-memo/memo_03.png" alt="ios-memo/memo_03.png"/>
+      <figcaption><span>ios-memo/memo_03.png</span><span>190 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/ios-memo/memo_04.png" alt="ios-memo/memo_04.png"/>
+      <figcaption><span>ios-memo/memo_04.png</span><span>200 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="02-xhs-textcard/ios-memo/memo_05.png" alt="ios-memo/memo_05.png"/>
+      <figcaption><span>ios-memo/memo_05.png</span><span>71 KB</span></figcaption></figure>
+  </div>
+</section>
+<section>
+  <h2>Run 03 · MarkCard Studio（306★）导出 PNG 套图 <span style="color:var(--muted);font-weight:400;font-size:13px">（12 张）</span></h2>
+  <div class="grid">
+    <figure><img loading="lazy" src="03-markcard-studio/swiss-grid/markcard-page-1.jpg" alt="swiss-grid/markcard-page-1.jpg"/>
+      <figcaption><span>swiss-grid/markcard-page-1.jpg</span><span>89 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/swiss-grid/markcard-page-2.jpg" alt="swiss-grid/markcard-page-2.jpg"/>
+      <figcaption><span>swiss-grid/markcard-page-2.jpg</span><span>107 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/swiss-grid/markcard-page-3.jpg" alt="swiss-grid/markcard-page-3.jpg"/>
+      <figcaption><span>swiss-grid/markcard-page-3.jpg</span><span>105 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/swiss-grid/markcard-page-4.jpg" alt="swiss-grid/markcard-page-4.jpg"/>
+      <figcaption><span>swiss-grid/markcard-page-4.jpg</span><span>99 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/swiss-grid/markcard-page-5.jpg" alt="swiss-grid/markcard-page-5.jpg"/>
+      <figcaption><span>swiss-grid/markcard-page-5.jpg</span><span>105 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/swiss-grid/markcard-page-6.jpg" alt="swiss-grid/markcard-page-6.jpg"/>
+      <figcaption><span>swiss-grid/markcard-page-6.jpg</span><span>104 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/warm-journal/markcard-page-1.jpg" alt="warm-journal/markcard-page-1.jpg"/>
+      <figcaption><span>warm-journal/markcard-page-1.jpg</span><span>57 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/warm-journal/markcard-page-2.jpg" alt="warm-journal/markcard-page-2.jpg"/>
+      <figcaption><span>warm-journal/markcard-page-2.jpg</span><span>71 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/warm-journal/markcard-page-3.jpg" alt="warm-journal/markcard-page-3.jpg"/>
+      <figcaption><span>warm-journal/markcard-page-3.jpg</span><span>69 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/warm-journal/markcard-page-4.jpg" alt="warm-journal/markcard-page-4.jpg"/>
+      <figcaption><span>warm-journal/markcard-page-4.jpg</span><span>65 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/warm-journal/markcard-page-5.jpg" alt="warm-journal/markcard-page-5.jpg"/>
+      <figcaption><span>warm-journal/markcard-page-5.jpg</span><span>67 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="03-markcard-studio/warm-journal/markcard-page-6.jpg" alt="warm-journal/markcard-page-6.jpg"/>
+      <figcaption><span>warm-journal/markcard-page-6.jpg</span><span>68 KB</span></figcaption></figure>
+  </div>
+</section>
+<section>
+  <h2>Run 04 · takumi（3098★）金句卡 + 动态 GIF 封面 <span style="color:var(--muted);font-weight:400;font-size:13px">（7 张）</span></h2>
+  <div class="grid">
+    <figure><img loading="lazy" src="04-takumi/01-cover-photo.jpg" alt="01-cover-photo.jpg"/>
+      <figcaption><span>01-cover-photo.jpg</span><span>130 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="04-takumi/02-cover-lake.jpg" alt="02-cover-lake.jpg"/>
+      <figcaption><span>02-cover-lake.jpg</span><span>92 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="04-takumi/03-quote-1.png" alt="03-quote-1.png"/>
+      <figcaption><span>03-quote-1.png</span><span>37 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="04-takumi/04-quote-2.png" alt="04-quote-2.png"/>
+      <figcaption><span>04-quote-2.png</span><span>17 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="04-takumi/05-quote-3.png" alt="05-quote-3.png"/>
+      <figcaption><span>05-quote-3.png</span><span>38 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="04-takumi/06-quote-4.jpg" alt="06-quote-4.jpg"/>
+      <figcaption><span>06-quote-4.jpg</span><span>168 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="04-takumi/cover-animated.gif" alt="cover-animated.gif"/>
+      <figcaption><span>cover-animated.gif</span><span>4242 KB</span></figcaption></figure>
+  </div>
+</section>
+<section>
+  <h2>Run 05 · xiaohongshu-article-cards（37★）奶油信息卡轮播 <span style="color:var(--muted);font-weight:400;font-size:13px">（6 张）</span></h2>
+  <div class="grid">
+    <figure><img loading="lazy" src="05-article-cards/cream-editorial/cream-01.png" alt="cream-editorial/cream-01.png"/>
+      <figcaption><span>cream-editorial/cream-01.png</span><span>210 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="05-article-cards/cream-editorial/cream-02.png" alt="cream-editorial/cream-02.png"/>
+      <figcaption><span>cream-editorial/cream-02.png</span><span>227 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="05-article-cards/cream-editorial/cream-03.png" alt="cream-editorial/cream-03.png"/>
+      <figcaption><span>cream-editorial/cream-03.png</span><span>194 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="05-article-cards/cream-editorial/cream-04.png" alt="cream-editorial/cream-04.png"/>
+      <figcaption><span>cream-editorial/cream-04.png</span><span>200 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="05-article-cards/cream-editorial/cream-05.png" alt="cream-editorial/cream-05.png"/>
+      <figcaption><span>cream-editorial/cream-05.png</span><span>148 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="05-article-cards/cream-editorial/cream-06.png" alt="cream-editorial/cream-06.png"/>
+      <figcaption><span>cream-editorial/cream-06.png</span><span>166 KB</span></figcaption></figure>
+  </div>
+</section>
+<section>
+  <h2>06-satori <span style="color:var(--muted);font-weight:400;font-size:13px">（4 张）</span></h2>
+  <div class="grid">
+    <figure><img loading="lazy" src="06-satori/01-cover.jpg" alt="01-cover.jpg"/>
+      <figcaption><span>01-cover.jpg</span><span>110 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="06-satori/02-quote-1.png" alt="02-quote-1.png"/>
+      <figcaption><span>02-quote-1.png</span><span>35 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="06-satori/03-quote-2.png" alt="03-quote-2.png"/>
+      <figcaption><span>03-quote-2.png</span><span>39 KB</span></figcaption></figure>
+    <figure><img loading="lazy" src="06-satori/04-quote-3.png" alt="04-quote-3.png"/>
+      <figcaption><span>04-quote-3.png</span><span>33 KB</span></figcaption></figure>
+  </div>
+</section>
+<footer>由 <code>setup/build-gallery.mjs</code> 生成 · 图片为工具原生产出（&gt;320KB 的转 JPEG q90 以控制体积）</footer>
+</body></html>

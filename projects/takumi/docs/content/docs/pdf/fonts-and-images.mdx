@@ -1,0 +1,96 @@
+---
+title: Fonts & images
+description: Load fonts and image bytes for PDF rendering, including SVG charts and offline assets.
+icon: Type
+---
+
+Supply fonts through `fonts` and image bytes through `images`. Remote document images must be fetched before rendering. Font URL loaders and `googleFonts()` perform their own requests.
+
+## Fonts
+
+```tsx twoslash title="Fonts"
+import type { ReactNode } from "react";
+declare const doc: ReactNode;
+declare const fontBytes: Uint8Array;
+// ---cut---
+import { render } from "takumi-pdf";
+
+import { googleFonts } from "@takumi-rs/helpers";
+
+const pdf = await render(doc, {
+  // [!code highlight:2]
+  fonts: [...(await googleFonts(["Inter"])), { name: "Brand Sans", weight: 700, data: fontBytes }],
+  fontFamilies: ["Brand Sans", "Inter", "sans-serif"],
+});
+```
+
+Text stays selectable and searchable. Pass font URLs, raw bytes, or [`googleFonts`](/docs/typography-and-fonts#from-google-fonts) entries. `fontFamilies` sets the fallback chain, and a reused renderer deduplicates registered fonts.
+
+For offline renders, [bundle font files](/docs/typography-and-fonts#fonts-in-ci-and-offline-renders). Google Fonts requests use the shared [fetch limits and retries](/docs/load-images#fetch-limits).
+
+The renderer does not use installed system fonts. If no registered font covers a body-text character, the render fails with the character and its codepoint. Register coverage for every script you use. Google Fonts may split accented characters between `latin` and `latin-ext` subsets.
+
+Quote a family name that contains digits or spaces in CSS, such as `fontFamily: '"Source Serif 4"'`. An unquoted `Source Serif 4` is not a valid `font-family` value, so the declaration is dropped and the text falls back to the next family.
+
+## Uncovered text
+
+`uncoveredText` decides what a character no registered font covers turns into.
+
+| Value               | Result                                                     |
+| ------------------- | ---------------------------------------------------------- |
+| `"error"` (default) | Fails the render, naming each character and its codepoint. |
+| `"placeholder"`     | Draws the font's glyph 0, which the font may leave empty.  |
+| `"blank"`           | Draws nothing.                                             |
+
+**Neither `"placeholder"` nor `"blank"` reflows the line.** Glyph advances are absolute, so the character keeps the width the font gave it.
+
+```tsx twoslash title="Render with uncovered characters"
+import type { ReactNode } from "react";
+declare const doc: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(doc, { uncoveredText: "placeholder" });
+```
+
+### Standards forbid the placeholder
+
+Every PDF/A level and both PDF/UA levels forbid glyph 0. See [PDF/A and PDF/UA](/docs/pdf/pdf-a).
+
+**`"placeholder"` is rejected with any `pdfa` level, `tagged: "ua1"`, or `tagged: "ua2"`.** The error names the uncovered characters and the standard. Use `"blank"` there.
+
+### What copied text keeps
+
+Whether an uncovered character survives in the text layer depends on its shaping cluster. This holds for `"placeholder"` and `"blank"` alike.
+
+| Uncovered character                  | Copied text                                            |
+| ------------------------------------ | ------------------------------------------------------ |
+| On its own                           | Nothing. A PDF carries no Unicode mapping for glyph 0. |
+| A combining mark on a covered letter | The mark, through the letter it shares a cluster with. |
+
+## Images
+
+Pass fetched bytes for each image URL in the document. The PDF renderer does not fetch those URLs:
+
+```tsx twoslash title="Images"
+import type { ReactNode } from "react";
+declare const doc: ReactNode;
+declare const logoUrl: string;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const response = await fetch(logoUrl);
+if (!response.ok) throw new Error(`Logo request failed: ${response.status}`);
+const logoBytes = new Uint8Array(await response.arrayBuffer());
+
+const pdf = await render(doc, {
+  // [!code highlight]
+  images: [{ src: logoUrl, data: logoBytes }],
+});
+```
+
+SVG image sources embed as vector paths and gradients, so logos stay sharp at any zoom. Subtrees that vectors cannot express (filters, embedded bitmaps) rasterize at 2× their placed size. Raster sources embed once for each distinct pixel data.
+
+PNG, JPEG and WebP bytes all embed. A JPEG goes in as the JPEG you passed, so the PDF carries the compression the file already had. GIF bytes are rejected: no decoder for them ships in this build.
+
+CSS color filters on images require decoded pixels. The PDF build decodes PNG for this path, so filtered JPEG and WebP images are rejected. PDF output also rejects CSS `filter: blur()` and `drop-shadow()`. Prepare those effects in a raster image before rendering.

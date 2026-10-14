@@ -1,0 +1,56 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreWorkspaces": ["example/*"],
+  "ignoreBinaries": ["jq", "wasm-pack"],
+  "rules": {
+    "duplicates": "warn"
+  },
+  "workspaces": {
+    "docs": {
+      "entry": [
+        "src/pages/**/*.{ts,tsx}",
+        "waku.config.ts",
+        "source.config.ts",
+        "press.config.tsx",
+        "app/playground/worker.ts",
+        "tests/**/*.test.{ts,tsx}"
+      ],
+      "ignore": ["public/**", "app/playground/templates/**", "src/app.css"],
+      "ignoreDependencies": [
+        "@takumi-rs/core",
+        "@takumi-rs/helpers",
+        "@takumi-rs/wasm",
+        "takumi-paint",
+        "takumi-pdf",
+        "twoslash"
+      ],
+      "ignoreUnresolved": ["@/components/takumi/image/blog-post"]
+    },
+    "takumi-helpers": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignoreUnresolved": ["./google-fonts-catalog"]
+    },
+    "takumi-js": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignoreUnresolved": ["#backend"]
+    },
+    "takumi-napi": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignoreUnresolved": ["../index"]
+    },
+    "takumi-wasm": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["pkg*/**"]
+    },
+    "takumi-pdf-js": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["pkg*/**"],
+      "ignoreDependencies": ["react"]
+    },
+    "takumi-paint": {
+      "entry": ["tests/**/*.test.{ts,tsx}"],
+      "ignore": ["pkg*/**"],
+      "ignoreDependencies": ["react"]
+    }
+  }
+}

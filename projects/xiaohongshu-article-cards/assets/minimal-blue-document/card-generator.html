@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>极简蓝白文档卡模板</title>
+  <style>
+    :root {
+      --paper: #fffefb;
+      --ink: #080808;
+      --blue: #0b4bd8;
+      --gray: #707070;
+      --soft: #f4f5f7;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #dedede; color: var(--ink); }
+    body {
+      display: grid;
+      gap: 40px;
+      padding: 40px;
+      justify-content: center;
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+    }
+    .card {
+      width: 1080px;
+      height: 1440px;
+      overflow: hidden;
+      background: var(--paper);
+      padding: 50px 52px 42px;
+      display: flex;
+      flex-direction: column;
+    }
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      padding-bottom: 20px;
+      border-bottom: 2px solid var(--ink);
+      font: 500 23px/1.2 Consolas, "Courier New", monospace;
+      letter-spacing: 1px;
+    }
+    [data-card-content] {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .blue { color: var(--blue); }
+    .lead {
+      color: var(--blue);
+      font-size: 34px;
+      line-height: 1.38;
+      font-weight: 850;
+    }
+    .page-title {
+      margin: 42px 0 14px;
+      max-width: 900px;
+      font-size: 82px;
+      line-height: 1.04;
+      letter-spacing: -3px;
+      font-weight: 950;
+    }
+    .footer {
+      margin-top: 22px;
+      border-top: 13px solid var(--blue);
+      padding: 19px 4px 0;
+      font-size: 25px;
+      line-height: 1.35;
+      font-weight: 750;
+    }
+    [contenteditable="true"]:focus { outline: 2px dashed var(--blue); outline-offset: 4px; }
+
+    /* 01 封面 */
+    .cover-layout {
+      display: grid;
+      grid-template-columns: 1fr 270px;
+      gap: 28px;
+      align-items: center;
+      margin-top: 58px;
+    }
+    .cover-title {
+      font-size: 96px;
+      line-height: 1.02;
+      letter-spacing: -5px;
+      font-weight: 950;
+    }
+    .line-icon {
+      position: relative;
+      height: 230px;
+      border: 8px solid var(--blue);
+      border-radius: 16px;
+    }
+    .line-icon::before {
+      content: "";
+      position: absolute;
+      left: 42px;
+      top: 62px;
+      width: 92px;
+      height: 92px;
+      border: 8px solid var(--blue);
+      border-radius: 14px;
+    }
+    .line-icon::after {
+      content: "≡";
+      position: absolute;
+      right: 28px;
+      top: 58px;
+      color: var(--blue);
+      font: 76px/1 Consolas, monospace;
+    }
+    .outline-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 44px;
+      border: 3px solid var(--ink);
+      padding: 28px 30px;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-title { font-size: 32px; font-weight: 900; margin-bottom: 10px; }
+    .row {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      align-items: center;
+      border-top: 1.5px solid var(--blue);
+      font-size: 27px;
+      line-height: 1.35;
+      font-weight: 750;
+    }
+    .row:first-of-type { border-top: 0; }
+    .number { color: var(--blue); font: 500 42px/1 Consolas, monospace; }
+
+    /* 02 概念解释 */
+    .concept-title { font-size: 120px; line-height: .95; }
+    .narratives {
+      flex: 1;
+      min-height: 0;
+      margin-top: 40px;
+      display: flex;
+      flex-direction: column;
+    }
+    .narrative {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 34px;
+      align-items: center;
+      border-bottom: 2px solid var(--ink);
+      padding: 24px 0;
+    }
+    .narrative:last-child { border-bottom: 0; }
+    .narrative-no { color: var(--blue); font: 300 82px/1 Consolas, monospace; }
+    .narrative-body { border-left: 2px solid var(--ink); padding-left: 36px; }
+    .narrative h3 { font-size: 40px; margin-bottom: 15px; }
+    .narrative p { font-size: 26px; line-height: 1.58; }
+
+    /* 03 文件结构 */
+    .tree-panel {
+      margin-top: 28px;
+      padding: 24px 58px;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: white;
+      font: 30px/1.5 Consolas, "Microsoft YaHei", monospace;
+      white-space: pre-line;
+    }
+    .structure-list { flex: 1; min-height: 0; margin-top: 24px; display: flex; flex-direction: column; }
+    .structure-item {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 145px 1fr;
+      gap: 28px;
+      align-items: center;
+      border-top: 2px solid var(--ink);
+      padding: 18px 0;
+    }
+    .structure-no { color: var(--blue); font: 300 72px/1 Consolas, monospace; }
+    .structure-copy { border-left: 2px solid var(--ink); padding-left: 34px; }
+    .structure-copy h3 { font-size: 32px; margin-bottom: 8px; }
+    .structure-copy p { font-size: 22px; line-height: 1.45; }
+
+    /* 04 真实示例 */
+    .code-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 26px;
+      padding: 24px 26px;
+      border: 2px solid var(--ink);
+      background: #11151a;
+      color: #d8dee9;
+      font: 20px/1.46 Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    .code-panel .cyan { color: #79d4ff; }
+    .code-panel .green { color: #79d17d; }
+    .code-panel .orange { color: #ffc46b; }
+    .example-callout {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      align-items: center;
+    }
+    .example-callout .number { font-size: 78px; border-right: 2px solid var(--ink); }
+    .example-callout strong { padding-left: 34px; font-size: 37px; }
+
+    /* 05 发现流程 */
+    .flow-root {
+      width: 380px;
+      margin: 26px auto 0;
+      padding: 18px 24px;
+      border: 2px solid var(--ink);
+      text-align: center;
+      font-size: 30px;
+      font-weight: 850;
+    }
+    .flow-grid {
+      flex: 1;
+      min-height: 0;
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: 290px 1fr;
+      gap: 44px;
+    }
+    .direct-path, .progressive-path { display: flex; flex-direction: column; }
+    .path-label { color: var(--blue); font-size: 24px; font-weight: 850; margin-bottom: 14px; }
+    .flow-box {
+      border: 2px solid var(--ink);
+      padding: 22px 24px;
+      background: white;
+    }
+    .direct-path .flow-box { min-height: 142px; display: grid; place-items: center; text-align: center; font-size: 27px; font-weight: 800; }
+    .down-arrow { color: var(--ink); text-align: center; font-size: 34px; line-height: 1.25; }
+    .progressive-path { gap: 14px; }
+    .progressive-path .flow-box {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      align-items: center;
+      gap: 18px;
+    }
+    .flow-step { color: var(--blue); font: 300 60px/1 Consolas, monospace; }
+    .flow-copy h3 { font-size: 28px; margin-bottom: 6px; }
+    .flow-copy p { font-size: 19px; line-height: 1.4; }
+    .flow-result {
+      margin-top: 24px;
+      padding: 22px;
+      border: 2px solid var(--blue);
+      color: var(--blue);
+      text-align: center;
+      font-size: 30px;
+      font-weight: 900;
+    }
+
+    /* 06 特点总结 */
+    .feature-stack {
+      flex: 1;
+      min-height: 0;
+      margin-top: 30px;
+      position: relative;
+    }
+    .feature-card {
+      position: absolute;
+      width: 710px;
+      min-height: 260px;
+      padding: 30px;
+      border: 2px solid var(--ink);
+      background: white;
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 26px;
+      align-items: center;
+    }
+    .feature-card:nth-child(1) { left: 8px; top: 0; }
+    .feature-card:nth-child(2) { right: 8px; top: 290px; }
+    .feature-card:nth-child(3) { left: 30px; top: 580px; }
+    .feature-icon {
+      width: 112px;
+      height: 112px;
+      margin: auto;
+      border: 5px solid var(--blue);
+      position: relative;
+    }
+    .feature-card:nth-child(2) .feature-icon { border-radius: 24px; }
+    .feature-card:nth-child(3) .feature-icon { border-radius: 50%; border-left-color: transparent; }
+    .feature-card h3 { font-size: 35px; margin-bottom: 12px; }
+    .feature-card p { font-size: 22px; line-height: 1.48; }
+    .feature-key {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 2px solid var(--blue);
+      color: var(--blue);
+      font-size: 21px;
+      font-weight: 850;
+    }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="meta"><span>系列名称 · 封面</span><span>01 / 06</span></div>
+    <main data-card-content contenteditable="true">
+      <div class="cover-layout">
+        <h1 class="cover-title">每天一个<br><span class="blue">知识主题</span><br>是什么？</h1>
+        <div class="line-icon" aria-label="线性主题图标"></div>
+      </div>
+      <div class="outline-panel" data-content-end>
+        <div class="panel-title">本期主要内容</div>
+        <div class="row"><div class="number">01</div><div>[第一个内容主题]</div></div>
+        <div class="row"><div class="number">02</div><div>[第二个内容主题]</div></div>
+        <div class="row"><div class="number">03</div><div>[第三个内容主题]</div></div>
+        <div class="row"><div class="number">04</div><div>[第四个内容主题]</div></div>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer>一句话：[整套内容的核心价值]</footer>
+  </section>
+
+  <section class="card">
+    <div class="meta"><span>系列名称 · 概念解释</span><span>02 / 06</span></div>
+    <main data-card-content contenteditable="true">
+      <h2 class="page-title concept-title">[核心概念]<br>是什么？</h2>
+      <p class="lead">[一句清晰定义或中心判断]</p>
+      <div class="narratives" data-content-end>
+        <article class="narrative"><div class="narrative-no">01</div><div class="narrative-body"><h3>[本质]</h3><p>[用一段完整文字解释概念的本质、作用对象和稳定结果。]</p></div></article>
+        <article class="narrative"><div class="narrative-no">02</div><div class="narrative-body"><h3>[新架构或关键变化]</h3><p>[解释它与旧方式的差异，以及为什么这种方式更适合当前问题。]</p></div></article>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer>一句话：[本页结论]</footer>
+  </section>
+
+  <section class="card">
+    <div class="meta"><span>系列名称 · 文件结构</span><span>03 / 06</span></div>
+    <main data-card-content contenteditable="true">
+      <h2 class="page-title">[对象]长什么样？</h2>
+      <p class="lead">[结构名称与一句说明]</p>
+      <div class="tree-panel">my-project/
+├── main-file.md
+├── scripts/
+└── assets/ 或 references/</div>
+      <div class="structure-list" data-content-end>
+        <article class="structure-item"><div class="structure-no">01</div><div class="structure-copy"><h3>[核心说明文件]</h3><p>[元数据、规则与完成标准。]</p></div></article>
+        <article class="structure-item"><div class="structure-no">02</div><div class="structure-copy"><h3>[可执行脚本]</h3><p>[反复运行、需要确定性的处理逻辑。]</p></div></article>
+        <article class="structure-item"><div class="structure-no">03</div><div class="structure-copy"><h3>[资源与参考]</h3><p>[模板、图片、规范或任务说明。]</p></div></article>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer>一句话：[规则、执行与资源各自承担什么]</footer>
+  </section>
+
+  <section class="card">
+    <div class="meta"><span>系列名称 · 真实示例</span><span>04 / 06</span></div>
+    <main data-card-content contenteditable="true">
+      <h2 class="page-title">[对象]的<br>具体例子？</h2>
+      <p class="lead">[示例名称与一句用途说明]</p>
+      <div class="code-panel"><span class="orange">---</span>
+<span class="green">name:</span> example-workflow
+<span class="green">description:</span> &gt;-
+  [说明这个流程什么时候触发，解决什么问题。]
+<span class="orange">---</span>
+
+<span class="cyan"># 必须执行的流程</span>
+1. 读取输入材料并确认范围。
+2. 检查关键结构与约束。
+3. 生成结果并运行自动校验。
+4. 人工复核视觉和内容质量。
+
+<span class="cyan"># 最低检查项</span>
+- 不裁切、不重叠、不溢出。
+- 保留关键事实、数字和链接。
+- 输出结构与用户目标一致。</div>
+      <div class="example-callout" data-content-end><div class="number">01</div><strong>[这个示例固化的 workflow]</strong></div>
+    </main>
+    <footer class="footer" data-card-footer>一句话：[把高频流程沉淀成可重复执行的方法]</footer>
+  </section>
+
+  <section class="card">
+    <div class="meta"><span>系列名称 · 发现流程</span><span>05 / 06</span></div>
+    <main data-card-content contenteditable="true">
+      <h2 class="page-title">系统怎么知道<br>该用哪个能力？</h2>
+      <p class="lead">两种方式：直接指定，或渐进式披露</p>
+      <div class="flow-root">用户提出任务</div>
+      <div class="flow-grid">
+        <div class="direct-path"><div class="path-label">方式 A</div><div class="flow-box">直接告诉系统<br>使用哪个能力</div><div class="down-arrow">↓</div><div class="flow-box">立即调用</div></div>
+        <div class="progressive-path">
+          <div class="path-label">方式 B｜渐进式披露</div>
+          <div class="flow-box"><div class="flow-step">01</div><div class="flow-copy"><h3>扫描目录</h3><p>先读取名称与描述。</p></div></div>
+          <div class="flow-box"><div class="flow-step">02</div><div class="flow-copy"><h3>匹配任务</h3><p>判断描述是否与目标匹配。</p></div></div>
+          <div class="flow-box"><div class="flow-step">03</div><div class="flow-copy"><h3>读取说明</h3><p>匹配后加载完整规则。</p></div></div>
+          <div class="flow-box"><div class="flow-step">04</div><div class="flow-copy"><h3>按需调用资源</h3><p>只在需要时加载脚本与参考。</p></div></div>
+        </div>
+      </div>
+      <div class="flow-result" data-content-end>高效执行任务 · 节省上下文</div>
+    </main>
+    <footer class="footer" data-card-footer>一句话：[先看元数据，匹配后再逐层读取]</footer>
+  </section>
+
+  <section class="card">
+    <div class="meta"><span>系列名称 · 特点总结</span><span>06 / 06</span></div>
+    <main data-card-content contenteditable="true">
+      <h2 class="page-title">[对象]的<br>核心特点？</h2>
+      <p class="lead">[把经验沉淀为能力，再让能力持续成长]</p>
+      <div class="feature-stack" data-content-end>
+        <article class="feature-card"><div class="feature-icon"></div><div><h3>[效率与可靠性]</h3><p>[说明标准流程如何减少临时判断并稳定输出。]</p><div class="feature-key">经验 × 规范 × 完整方案</div></div></article>
+        <article class="feature-card"><div class="feature-icon"></div><div><h3>[复用性]</h3><p>[说明一次开发如何被不同任务或多个执行者复用。]</p><div class="feature-key">开发一次 → 多场景复用</div></div></article>
+        <article class="feature-card"><div class="feature-icon"></div><div><h3>[持续进化]</h3><p>[说明问题如何反哺规则、资源和新版本。]</p><div class="feature-key">发现问题 → 更新能力 → 沉淀解法</div></div></article>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer>一句话：[更稳定、更易复用，也能持续升级]</footer>
+  </section>
+</body>
+</html>

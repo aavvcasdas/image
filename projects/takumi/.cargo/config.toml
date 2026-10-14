@@ -1,0 +1,5 @@
+[env]
+MACOSX_DEPLOYMENT_TARGET = "10.13"
+
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

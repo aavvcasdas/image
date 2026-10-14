@@ -1,0 +1,105 @@
+---
+title: Output Formats
+description: Choose PNG, JPEG, WebP, ICO, raw pixels, or SVG output and configure image quality and resolution.
+icon: FileImage
+---
+
+`render()` returns encoded image bytes. The `format` option picks the encoder.
+
+## Picking a format
+
+`format` defaults to `png`. `quality` and `lossless` apply only where the table marks a Yes, and are ignored elsewhere. `quality` runs `0`–`100` (default `75`).
+
+```tsx twoslash title="Choose an image encoder"
+import { render } from "takumi-js";
+
+const card = <div tw="w-full h-full grid place-items-center bg-white">Hello Takumi</div>;
+
+// [!code highlight:3]
+const png = await render(card, { width: 1200, height: 630, format: "png" });
+const jpeg = await render(card, { width: 1200, height: 630, format: "jpeg", quality: 80 });
+const webp = await render(card, { width: 1200, height: 630, format: "webp", lossless: true });
+```
+
+| Format          | Alpha | Honors `quality` | Honors `lossless` | Notes                                           |
+| :-------------- | :---- | :--------------- | :---------------- | :---------------------------------------------- |
+| `png` (default) | Yes   | No               | No                | Lossless. Use for transparency or exact pixels. |
+| `jpeg`          | No    | Yes              | No                | Lossy. Alpha is flattened. Best for photos.     |
+| `webp`          | Yes   | Yes              | Yes               | Lossy with `quality`; `lossless: true` wins.    |
+| `ico`           | Yes   | No               | No                | Favicon container, PNG-encoded inside.          |
+| `raw`           | Yes   | No               | No                | Uncompressed RGBA bytes, `width × height × 4`.  |
+
+<Callout type="info">
+  On `@takumi-rs/wasm`, WebP is always lossless and the `lossless` knob is absent from the types.
+  `quality` still exists there and applies to JPEG.
+</Callout>
+
+### Raw frames
+
+`format: "raw"` skips encoding and hands back the RGBA buffer directly. Feed it to ffmpeg or any encoder you already run. The [keyframe animation](/docs/keyframe-animation) page streams raw frames into ffmpeg for video output.
+
+## Device pixel ratio
+
+`devicePixelRatio` scales the output resolution without touching the layout. A `1200 × 630` render at `devicePixelRatio: 2` produces a `2400 × 1260` image whose elements keep their CSS sizes.
+
+```tsx twoslash title="Render at twice the resolution"
+import { render } from "takumi-js";
+
+const image = await render(<div>Hello Takumi</div>, {
+  width: 1200,
+  height: 630,
+  devicePixelRatio: 2, // [!code highlight]
+});
+```
+
+## Dithering
+
+`dithering` adds ordered Bayer noise to gradient fills before they quantize to 8-bit, removing visible banding. It applies to static image exports and `raw` buffers.
+
+- `none` (default)
+- `ordered-bayer`
+
+```tsx twoslash title="Reduce gradient banding"
+import { render } from "takumi-js";
+
+const image = await render(<div tw="w-full h-full bg-linear-to-r from-slate-900 to-slate-700" />, {
+  width: 1200,
+  height: 630,
+  dithering: "ordered-bayer", // [!code highlight]
+});
+```
+
+## Animated output
+
+`renderAnimation()` encodes a sequence as WebP, APNG, or GIF. See [Keyframe Animation](/docs/keyframe-animation).
+
+## Vector SVG
+
+`renderSvg()` is the second output backend. It returns an `<svg>` document string instead of a raster bitmap. The output is real `<rect>`, `<path>`, gradients, glyph outlines, and embedded images, drawn from the same layout.
+
+```tsx twoslash title="Render PNG and SVG"
+import { render, renderSvg } from "takumi-js";
+
+const card = <div>Hello Takumi</div>;
+
+const png = await render(card, { width: 1200, height: 630 });
+const svg = await renderSvg(card, { width: 1200, height: 630 }); // [!code highlight]
+```
+
+SVG is a vector format, so the raster-only knobs do not apply: `format`, `quality`, `lossless`, `dithering`, `drawDebugBorder`, `devicePixelRatio`.
+
+## Cancellation
+
+Every render takes an optional `AbortSignal`. Pass `signal` to abort a render that is still fetching fonts or images; an already-aborted signal throws before any work starts.
+
+```tsx twoslash title="Cancel with the request"
+import { ImageResponse } from "takumi-js/response";
+
+export function GET(request: Request) {
+  return new ImageResponse(<div>Hello Takumi</div>, {
+    width: 1200,
+    height: 630,
+    signal: request.signal, // [!code highlight]
+  });
+}
+```

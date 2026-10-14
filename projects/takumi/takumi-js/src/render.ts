@@ -1,0 +1,366 @@
+import type * as napi from "@takumi-rs/core";
+import type * as wasm from "@takumi-rs/wasm";
+import { extractEmojis, type EmojiType } from "@takumi-rs/helpers/emoji";
+import {
+  prepareImages,
+  type CssInput,
+  type FetchOptions,
+  type ImageFetchCache,
+} from "@takumi-rs/helpers";
+import { fromJsx, type FromJsxOptions } from "@takumi-rs/helpers/jsx";
+import { defaultRenderer, type Renderer } from "./backend/renderer";
+import type { ReactNode } from "react";
+import type { Node, ReactElementLike } from "@takumi-rs/helpers";
+import { fromHtml } from "@takumi-rs/helpers/html";
+
+type ImageLoader = napi.ImageLoader | wasm.ImageLoader;
+
+/**
+ * Images for a render: pre-fetched entries, or a group that also controls how remote images
+ * (and emoji glyphs) are fetched and cached.
+ */
+export type ImagesInput =
+  | ImageLoader[]
+  | (FetchOptions & {
+      /** Pre-fetched entries, same as the array form. */
+      sources?: ImageLoader[];
+      /** Single-flight byte cache shared across renders. */
+      fetchCache?: ImageFetchCache;
+      /** Decode-cache default for every image this render; a source's own `cache` wins. */
+      cache?: NonNullable<ImageLoader["cache"]>;
+    });
+
+/** The managed-renderer plumbing shared by every entry point. */
+type SharedRenderExtras = {
+  renderer: Renderer;
+  signal?: AbortSignal;
+  jsx?: FromJsxOptions;
+  images?: ImagesInput;
+  /**
+   * @description The emoji provider to use when rendering emojis. If set to `"from-font"`, the renderer will attempt to source emoji glyphs from the loaded fonts.
+   * @default "twemoji"
+   */
+  emoji?: EmojiType | "from-font";
+};
+
+type ManagedRendererOptions = {
+  /**
+   * @description The WebAssembly module to use for the renderer. If not provided, the default resolving strategy will be used.
+   */
+  module?: wasm.InitInput | Promise<wasm.InitInput> | { default: wasm.InitInput };
+};
+
+/**
+ * Adds the managed-renderer plumbing to a set of inner options. Either bring your
+ * own `renderer`, or let Takumi resolve one (optionally pointing at a WASM
+ * `module`).
+ */
+type Managed<TInner> =
+  | (TInner & SharedRenderExtras)
+  | (TInner & Omit<SharedRenderExtras, "renderer"> & ManagedRendererOptions);
+
+/**
+ * `Omit` that distributes over unions, so the backends' `format`/`quality`/`lossless`
+ * tagged union survives instead of collapsing into one flat member.
+ */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+/** The wrapper-level CSS inputs, replacing the backends' `stylesheets` field. */
+type CssOptions = {
+  /** CSS to apply before rendering, one string or a list cascading in order. */
+  css?: CssInput | readonly CssInput[];
+  /**
+   * CSS stylesheets to apply before rendering.
+   * @deprecated Use `css` instead. Will be removed in v3.
+   */
+  stylesheets?: string[];
+};
+
+type InnerRenderOptions = DistributiveOmit<
+  napi.RenderOptions | wasm.RenderOptions,
+  "images" | "css"
+> &
+  CssOptions;
+type InnerSvgRenderOptions = DistributiveOmit<
+  napi.SvgRenderOptions | wasm.SvgRenderOptions,
+  "images" | "css"
+> &
+  CssOptions;
+type InnerRenderAnimationOptions = DistributiveOmit<
+  napi.RenderAnimationOptions | wasm.RenderAnimationOptions,
+  "images" | "css"
+> &
+  CssOptions;
+
+export type RenderOptions = Managed<InnerRenderOptions>;
+export type RenderSvgOptions = Managed<InnerSvgRenderOptions>;
+
+/** A single animation scene whose content is any renderable input. */
+export type AnimationScene = Omit<napi.AnimationScene, "node"> & {
+  /** The content to render for this scene: JSX, an HTML string, or a node tree. */
+  node: RenderInput;
+};
+
+export type RenderAnimationOptions = Managed<
+  DistributiveOmit<InnerRenderAnimationOptions, "scenes"> & {
+    /** The scenes to render sequentially. */
+    scenes: AnimationScene[];
+  }
+>;
+
+/** The subset of options the shared pipeline reads, across every entry point. */
+type PipelineOptions = Partial<SharedRenderExtras> &
+  ManagedRendererOptions & {
+    css?: CssInput | readonly CssInput[];
+    stylesheets?: string[];
+  };
+
+export type RenderInput = ReactNode | ReactElementLike | Node | string;
+
+function isTakumiNode(element: unknown): element is Node {
+  if (typeof element !== "object" || element === null || !("type" in element)) {
+    return false;
+  }
+
+  return element.type === "container" || element.type === "text" || element.type === "image";
+}
+
+async function transformElement(element: RenderInput, options?: PipelineOptions) {
+  if (isTakumiNode(element)) {
+    return {
+      node: element,
+      css: [],
+    };
+  }
+
+  if (typeof element === "string") {
+    return fromHtml(element);
+  }
+
+  return fromJsx(element, options?.jsx);
+}
+
+/** Resolves a caller-supplied renderer or the default provider. */
+async function resolveRenderer(options?: PipelineOptions): Promise<Renderer> {
+  if (options && "renderer" in options && options.renderer) {
+    return options.renderer;
+  }
+
+  return defaultRenderer.get(options?.module);
+}
+
+/** Transforms an input into a node tree and extracts its emojis. */
+async function resolveContent(element: RenderInput, options?: PipelineOptions) {
+  const { node: originalNode, css } = await transformElement(element, options);
+  const emojiType = options?.emoji ?? "twemoji";
+  const node = emojiType !== "from-font" ? extractEmojis(originalNode, emojiType) : originalNode;
+
+  return { node, css };
+}
+
+/** Resolves the render's `images` option into concrete entries via {@link prepareImages}. */
+async function collectImages(
+  node: Node | Node[],
+  options?: PipelineOptions,
+): Promise<ImageLoader[]> {
+  const images = options?.images;
+  const { sources, fetchCache, fetch, timeout, maxBytes, allowUrl, cache } = Array.isArray(images)
+    ? { sources: images }
+    : (images ?? {});
+
+  const prepared = await prepareImages({
+    node,
+    sources,
+    fetchCache,
+    fetch,
+    timeout,
+    maxBytes,
+    allowUrl,
+    signal: options?.signal,
+  });
+
+  return cache
+    ? prepared.map((image) => ({
+        ...image,
+        cache: ("cache" in image ? image.cache : undefined) ?? cache,
+      }))
+    : prepared;
+}
+
+let warnedStylesheets = false;
+
+function warnStylesheetsDeprecated(): void {
+  if (warnedStylesheets) return;
+  warnedStylesheets = true;
+  console.warn("takumi: the `stylesheets` option is deprecated, use `css` instead.");
+}
+
+/** Narrows the `css` option, which takes one entry or a list of them. */
+function isCssList(css: CssInput | readonly CssInput[]): css is readonly CssInput[] {
+  return Array.isArray(css);
+}
+
+function mergeCss(options: PipelineOptions | undefined, extra: string[]): CssInput[] {
+  if (options?.css !== undefined && options?.stylesheets !== undefined) {
+    throw new Error("pass either `css` or `stylesheets`, not both");
+  }
+
+  if (options?.stylesheets !== undefined) {
+    warnStylesheetsDeprecated();
+  }
+
+  const own =
+    options?.css !== undefined
+      ? isCssList(options.css)
+        ? options.css
+        : [options.css]
+      : (options?.stylesheets ?? []);
+
+  return [...own, ...extra];
+}
+
+/** Resolves the renderer, node tree, and backend options, images and CSS merged in, a single scene needs. */
+async function prepareScene<T extends PipelineOptions>(element: RenderInput, options?: T) {
+  options?.signal?.throwIfAborted();
+
+  const renderer = await resolveRenderer(options);
+  const { node, css } = await resolveContent(element, options);
+  const images = await collectImages(node, options);
+
+  // The WASM renderer is synchronous and ignores the signal argument, so honor an
+  // abort that happened during the async font and image loading before the blocking call.
+  options?.signal?.throwIfAborted();
+
+  const { css: _, stylesheets: _alias, ...forward } = options ?? {};
+
+  return { renderer, node, options: { ...forward, images, css: mergeCss(options, css) } };
+}
+
+/**
+ * Renders a React element, HTML string, or Takumi node tree into an image.
+ *
+ * This function automatically detects the best renderer for your environment (native Rust on Node.js,
+ * WASM on Edge/Workers) and handles fetching fonts and images, and emoji extraction.
+ *
+ * @example
+ * ```tsx
+ * import { render } from "takumi-js";
+ *
+ * const buffer = await render(
+ *   <div tw="bg-blue-500 text-white p-4">Hello World</div>,
+ *   { width: 1200, height: 630 }
+ * );
+ * ```
+ *
+ * @param element - The content to render. Can be a JSX element (React-like), an HTML string, or a pre-constructed node tree.
+ * @param options - Configuration for rendering, including dimensions, format, fonts, and more.
+ * @returns A promise that resolves to the rendered image data (Buffer/Uint8Array).
+ */
+export async function render(element: RenderInput, options?: RenderOptions) {
+  const scene = await prepareScene(element, options);
+
+  return scene.renderer.render(scene.node, scene.options);
+}
+
+/**
+ * Lays out a React element, HTML string, or Takumi node tree without painting it.
+ *
+ * Same input handling, CSS, emoji, and image pipeline as {@link render}, on the same default
+ * renderer, so fonts registered for rendering measure too.
+ *
+ * @example
+ * ```tsx
+ * import { measure } from "takumi-js";
+ *
+ * const { width, height } = await measure(<span tw="text-xl">Hello World</span>);
+ * ```
+ *
+ * @returns A promise that resolves to the measured node tree.
+ */
+export async function measure(element: RenderInput, options?: RenderOptions) {
+  const scene = await prepareScene(element, options);
+
+  return scene.renderer.measure(scene.node, scene.options);
+}
+
+/**
+ * Renders a React element, HTML string, or Takumi node tree into a vector SVG
+ * document string.
+ *
+ * Same input handling and image pipeline as {@link render}, but emits real SVG
+ * (`<rect>`, `<path>`, gradients, glyph outlines, embedded images) instead of a
+ * raster bitmap.
+ *
+ * @example
+ * ```tsx
+ * import { renderSvg } from "takumi-js";
+ *
+ * const svg = await renderSvg(
+ *   <div tw="bg-blue-500 text-white p-4">Hello World</div>,
+ *   { width: 1200, height: 630 }
+ * );
+ * ```
+ *
+ * @returns A promise that resolves to the SVG document string.
+ */
+export async function renderSvg(element: RenderInput, options?: RenderSvgOptions): Promise<string> {
+  const scene = await prepareScene(element, options);
+
+  return scene.renderer.renderSvg(scene.node, scene.options);
+}
+
+/**
+ * Renders a sequence of scenes into an animated image (WebP / APNG / GIF).
+ *
+ * Each scene's content goes through the same input handling and image pipeline
+ * as {@link render}; images are fetched once across all scenes.
+ *
+ * @example
+ * ```tsx
+ * import { renderAnimation } from "takumi-js";
+ *
+ * const webp = await renderAnimation({
+ *   width: 600,
+ *   height: 400,
+ *   fps: 30,
+ *   format: "webp",
+ *   scenes: [
+ *     { node: <div tw="bg-red-500 w-full h-full" />, durationMs: 500 },
+ *     { node: <div tw="bg-blue-500 w-full h-full" />, durationMs: 500 },
+ *   ],
+ * });
+ * ```
+ *
+ * @returns A promise that resolves to the encoded animation (Buffer/Uint8Array).
+ */
+export async function renderAnimation(options: RenderAnimationOptions) {
+  options.signal?.throwIfAborted();
+
+  const { css: _, stylesheets: _alias, ...forward } = options;
+
+  const renderer = await resolveRenderer(options);
+  const scenes = await Promise.all(
+    options.scenes.map(async (scene) => {
+      const { node, css } = await resolveContent(scene.node, options);
+      return { node, durationMs: scene.durationMs, css };
+    }),
+  );
+
+  const images = await collectImages(
+    scenes.map((scene) => scene.node),
+    options,
+  );
+  const css = mergeCss(
+    options,
+    scenes.flatMap((scene) => scene.css),
+  );
+
+  options.signal?.throwIfAborted();
+
+  return renderer.renderAnimation({
+    ...forward,
+    scenes: scenes.map(({ node, durationMs }) => ({ node, durationMs })),
+    images,
+    css,
+  });
+}

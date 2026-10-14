@@ -1,0 +1,218 @@
+import type { CssInput, Node } from "@takumi-rs/helpers";
+
+export type ByteBuf = Uint8Array | ArrayBuffer | Buffer;
+
+/** Cache policy for a decoded image. Defaults to `"auto"`. */
+export type ImageCacheMode = "auto" | "none";
+
+export type FontDetails = {
+  name?: string;
+  data: ByteBuf;
+  weight?: number;
+  style?: "normal" | "italic" | "oblique" | `oblique ${number}deg` | (string & {});
+  /**
+   * Inclusive codepoint ranges the font serves, as `@font-face` `unicode-range`. Register each
+   * subset of a family under the same `name` with its own ranges.
+   */
+  unicodeRange?: [number, number][];
+  /** @deprecated Register under `name` with `unicodeRange` instead. */
+  subsetOf?: string;
+  /** @deprecated Ignored; `unicodeRange` decides which subset serves a codepoint. */
+  subsetRank?: number;
+  /** CSS generic family keyword this font resolves for. */
+  generic?: string;
+};
+
+export type Font = FontDetails | ByteBuf;
+
+export type RegisteredFace = {
+  weight: number;
+  style: string;
+  width: number;
+  index: number;
+};
+
+export type RegisteredFamily = {
+  name: string;
+  faces: RegisteredFace[];
+};
+
+export type ImageSource = {
+  src: string;
+  data: ByteBuf;
+  /** Cache policy for the decoded image. Defaults to `"auto"`. */
+  cache?: ImageCacheMode;
+};
+
+/** Explicit page or viewport dimensions in CSS px (96 dpi). */
+export type Dimensions = { width: number; height: number };
+
+/** Viewport for single-page output. A missing height sizes the page to the content. */
+export type ViewportInput = { width: number; height?: number };
+
+/** A page size: a preset name (case-insensitive) or explicit dimensions. */
+export type PageSizeName =
+  | "a3"
+  | "a4"
+  | "a5"
+  | "b4"
+  | "b5"
+  | "jis-b4"
+  | "jis-b5"
+  | "ledger"
+  | "legal"
+  | "letter";
+
+/** A page size: a preset name or explicit {@link Dimensions}. */
+export type PageSize = PageSizeName | Dimensions;
+
+/**
+ * One side of a page margin: a length in CSS px, or `"auto"` to fit the band
+ * that draws on that side. `"auto"` never goes below the 37.8 a page starts with, and the
+ * left and right sides hold no band, so they land on it.
+ */
+export type PageMarginSide = number | "auto";
+
+/** A band on a page: a node tree, or `false` for none. */
+export type Band = Node | false;
+
+/** What some pages draw instead of the document's own bands. A field left out falls through. */
+export type PageOverride = {
+  header?: Band;
+  footer?: Band;
+};
+
+/** Overrides keyed by the pages they cover. `first` and `last` win over `odd` and `even`. */
+export type PageRules = {
+  first?: PageOverride;
+  last?: PageOverride;
+  odd?: PageOverride;
+  even?: PageOverride;
+};
+
+/** A page margin: one value for all sides, or per-side values (a side left out is `auto`). */
+export type PageMargin =
+  | PageMarginSide
+  | {
+      top?: PageMarginSide;
+      right?: PageMarginSide;
+      bottom?: PageMarginSide;
+      left?: PageMarginSide;
+    };
+
+/**
+ * A page to keep: a 1-based page number, or an inclusive span. An unset `from`
+ * starts at the first page; an unset `to` runs to the last.
+ */
+export type PageRange = number | { from?: number; to?: number };
+
+export type PdfMetadata = {
+  title?: string;
+  description?: string;
+  authors?: string[];
+  keywords?: string[];
+  creator?: string;
+  /** UTC creation date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`. */
+  creationDate?: string;
+};
+
+/** A file attached to the PDF, shown in the viewer's attachment panel. */
+export type Attachment = {
+  /** File name in the PDF, e.g. "factur-x.xml". */
+  name: string;
+  /** The file's bytes, or a string encoded as UTF-8. */
+  data: Uint8Array | string;
+  /** IANA media type, e.g. "application/xml". The PDF/A-3 levels require one. */
+  mimeType?: string;
+  /** Human-readable description. The PDF/A-3 levels require one. */
+  description?: string;
+  /**
+   * How the file relates to the document (the PDF/A-3 AFRelationship).
+   * Defaults to "unspecified".
+   */
+  relationship?: "source" | "data" | "alternative" | "supplement" | "unspecified";
+  /**
+   * UTC modification date, `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`; falls back
+   * to `metadata.creationDate`. The PDF/A-3 levels require one.
+   */
+  modificationDate?: string;
+};
+
+/** PDF/A conformance level. Validation failures reject the render. */
+export type Pdfa = "2a" | "2b" | "2u" | "3a" | "3b" | "3u" | "4" | "4f";
+
+/** Structure-tree emission: off, on (default), or validated against an accessibility standard. */
+export type Tagged = boolean | "ua1" | "ua2";
+
+export type PdfRenderOptions = {
+  /**
+   * Fixed viewport for single-page output. Mutually exclusive with the paged
+   * fields (`size`, `landscape`, `margin`, `header`, `footer`, `pages`, `pageRanges`).
+   */
+  viewport?: ViewportInput;
+  /** Page size for paged output. Defaults to A4. */
+  size?: PageSize;
+  /** Swaps the page's width and height, including explicit sizes. */
+  landscape?: boolean;
+  /** Page margin. Defaults to `"auto"` on every side. */
+  margin?: PageMargin;
+  /**
+   * Band repeated at the top of every page. Nodes classed `pageNumber` /
+   * `totalPages` receive the counters.
+   */
+  header?: Band;
+  /** Band repeated at the bottom of every page; same class hooks as `header`. */
+  footer?: Band;
+  /** What some pages draw differently from the rest. */
+  pages?: PageRules;
+  /**
+   * The pages the output keeps, e.g. `[1, { from: 4, to: 8 }]`. Page counters
+   * keep their full-output numbers.
+   */
+  pageRanges?: PageRange[];
+  /** Pre-fetched images keyed by URL. */
+  images?: ImageSource[];
+  /** CSS to apply before layout. */
+  css?: CssInput[];
+  /**
+   * CSS custom properties for `:root`, which utilities and `var()` both read.
+   * A name without the `--` prefix gains it.
+   */
+  cssVariables?: Record<string, string>;
+  /** Per-render font stack: ordered family names used as the fallback chain. */
+  fontFamilies?: string[];
+  /** Default BCP-47 language tag applied to the root. */
+  lang?: string;
+  /** Document metadata written to the PDF's info dictionary. */
+  metadata?: PdfMetadata;
+  /** Generates a PDF outline (bookmarks) from `h1`–`h6` headings. */
+  outline?: boolean;
+  /** PDF/A conformance level. */
+  pdfa?: Pdfa;
+  /** Structure-tree emission: `false`, `true` (default), `"ua1"` or `"ua2"`. */
+  tagged?: Tagged;
+  /** Files attached to the document. */
+  attachments?: Attachment[];
+  /**
+   * What a character no registered font covers turns into: `"error"` (default)
+   * fails the render naming it, `"placeholder"` draws the font's glyph 0, and
+   * `"blank"` draws nothing. Neither of the last two reflows the line.
+   *
+   * `"placeholder"` is rejected with any `pdfa` level or `tagged: "ua1"` /
+   * `"ua2"`, which forbid glyph 0.
+   */
+  uncoveredText?: UncoveredText;
+};
+
+/** What a character no registered font covers turns into on the page. */
+export type UncoveredText = "error" | "placeholder" | "blank";
+
+/** Options for `measure`: page geometry (or a viewport) plus layout resources. */
+export type MeasureOptions = (
+  | { size?: PageSize; landscape?: boolean; viewport?: never }
+  | { viewport: ViewportInput; size?: never; landscape?: never }
+) &
+  Pick<PdfRenderOptions, "images" | "css" | "cssVariables" | "fontFamilies" | "lang">;
+
+/** A node tree's laid-out size in CSS px. */
+export type MeasuredSize = { width: number; height: number };

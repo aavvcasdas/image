@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "takumi-workers-example",
+  "main": "src/index.tsx",
+  "compatibility_date": "2025-10-30",
+  "observability": {
+    "enabled": true,
+  },
+  "routes": [
+    {
+      "pattern": "takumi-on-workers-example.kane.tw",
+      "custom_domain": true,
+    },
+  ],
+  "rules": [
+    {
+      "type": "Data",
+      "globs": ["**/*.ttf", "**/*.woff", "**/*.woff2"],
+      "fallthrough": true,
+    },
+  ],
+}

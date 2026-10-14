@@ -1,0 +1,22 @@
+{
+  "name": "example-cloudflare-workers",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "cf-typegen": "wrangler types",
+    "build": "wrangler build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "catalog:",
+    "takumi-js": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.129.0"
+  }
+}

@@ -1,0 +1,43 @@
+[package]
+name = "takumi-napi"
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde.workspace = true
+rayon.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
+arc-swap.workspace = true
+
+[dependencies.serde_json]
+workspace = true
+features = ["float_roundtrip"]
+
+[dependencies.takumi-bindings-common]
+path = "../takumi-bindings-common"
+
+[dependencies.takumi-core]
+path = "../takumi-core"
+default-features = false
+features = ["woff2", "woff", "svg", "image-decoding"]
+
+[dependencies.takumi-raster]
+path = "../takumi-raster"
+default-features = false
+features = ["svg", "rayon"]
+
+[dependencies.takumi-svg]
+path = "../takumi-svg"
+
+[build-dependencies]
+napi-build.workspace = true
+
+[lints]
+workspace = true
+
+

@@ -1,3 +1,10 @@
 node_modules/
 *.log
 .DS_Store
+
+# 上游 vendor 项目的构建/依赖产物
+projects/*/node_modules/
+projects/*/dist/
+projects/*/target/
+projects/*/.vite/
+projects/markcard-studio/src-tauri/target/

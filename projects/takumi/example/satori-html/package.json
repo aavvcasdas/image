@@ -1,0 +1,14 @@
+{
+  "name": "example-satori-html",
+  "private": true,
+  "type": "module",
+  "module": "index.ts",
+  "dependencies": {
+    "satori-html": "^0.3.2",
+    "takumi-js": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

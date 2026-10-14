@@ -1,0 +1,4 @@
+interface:
+  display_name: "小红书图文卡片与双平台文案"
+  short_description: "制作小红书轮播，并生成小红书或快手发布文案"
+  default_prompt: "使用 $xiaohongshu-article-cards 高保真整理这份材料，完成轮播后询问我要生成小红书、快手还是双平台发布文案。"

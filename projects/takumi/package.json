@@ -1,0 +1,60 @@
+{
+  "name": "takumi-workspace",
+  "private": true,
+  "workspaces": [
+    "takumi-js",
+    "takumi-helpers",
+    "takumi-napi",
+    "takumi-wasm",
+    "takumi-image-response",
+    "takumi-pdf-js",
+    "takumi-paint",
+    "docs",
+    "example/*"
+  ],
+  "scripts": {
+    "test": "bun --filter '*' test --silent",
+    "build": "bun --filter '*' run build",
+    "lint": "oxlint --format=github && oxfmt --check",
+    "lint:fix": "oxlint --fix && oxfmt --write",
+    "tegami": "bun scripts/tegami.mts",
+    "knip": "knip-bun --no-config-hints",
+    "postinstall": "lefthook install",
+    "publish-lint": "bun --filter '*' publish-lint"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@types/bun": "^1.4.1",
+    "knip": "^6.34.0",
+    "lefthook": "^2.1.12",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
+    "publint": "^0.3.24",
+    "tegami": "^1.5.0",
+    "typescript": "catalog:"
+  },
+  "overrides": {
+    "@takumi-rs/image-response": "workspace:*",
+    "rolldown-plugin-dts": "0.27.6",
+    "takumi-js": "workspace:*",
+    "vite": "8.2.2",
+    "waku": "1.0.0-rc.0"
+  },
+  "catalog": {
+    "@types/bun": "^1.4.1",
+    "csstype": "^3.2.3",
+    "@types/node": "^26.4.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "lucide-react": "^1.45.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tsdown": "0.23.0",
+    "unrun": "^0.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "trustedDependencies": [
+    "webgpu"
+  ]
+}

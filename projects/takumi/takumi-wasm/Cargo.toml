@@ -1,0 +1,54 @@
+[package]
+name = "takumi-wasm"
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
+base64.workspace = true
+js-sys.workspace = true
+
+[dependencies.takumi-bindings-common]
+path = "../takumi-bindings-common"
+
+[dependencies.serde]
+workspace = true
+features = ["rc"]
+
+[dependencies.takumi-core]
+path = "../takumi-core"
+default-features = false
+features = ["woff2", "svg", "image-decoding"]
+
+[dependencies.takumi-raster]
+path = "../takumi-raster"
+default-features = false
+features = ["svg"]
+
+[dependencies.takumi-svg]
+path = "../takumi-svg"
+
+# https://github.com/rust-lang/rust/issues/93294
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = [
+  '-Oz',
+  '--converge',
+  '--code-folding',
+  '--enable-bulk-memory',
+  '--enable-mutable-globals',
+  '--enable-sign-ext',
+  '--strip-debug',
+  '--strip-dwarf',
+  '--strip-producers',
+  '--strip-target-features',
+]
+
+[lints]
+workspace = true
+
+

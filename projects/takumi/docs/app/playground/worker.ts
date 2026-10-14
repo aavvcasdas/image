@@ -1,0 +1,311 @@
+import { googleFonts, prepareImages } from "takumi-js/helpers";
+import { extractEmojis } from "takumi-js/helpers/emoji";
+import { fromJsx } from "takumi-js/helpers/jsx";
+import type { FetchedImage, Node } from "takumi-js/helpers";
+import wasm, { init, Renderer } from "takumi-js/wasm";
+import pdfWasm from "takumi-pdf/wasm-url";
+// `no-init` over the entry that instantiates the module: the worker has the
+// asset URL already, and instantiating up front would defeat the lazy fetch.
+import initPdf, { PdfRenderer } from "takumi-pdf/no-init";
+import paintWasm from "takumi-paint/wasm-url";
+import initPaint, { Painter } from "takumi-paint/no-init";
+import type { JSXElementConstructor } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { evaluateCodeExports } from "./evaluate";
+import { renderReact } from "./render-react";
+import { FALLBACK_FONT_URL, FONT_FAMILIES } from "./fonts";
+import { inspectPaint } from "./inspect-paint";
+import { inspectPdf } from "./inspect-pdf";
+import { cssEntryToText } from "./preview-css";
+import { messageSchema, type CssEntry, type OutputKind, type RenderMessageInput } from "./schema";
+
+type PdfOptions = NonNullable<PlaygroundOptions["pdf"]>;
+
+/** The box an image or animation lays out in, which the browser preview pane mirrors. */
+type ImageSize = { width: number; height: number };
+
+function pdfLabel(pdf: PdfOptions): string {
+  if (pdf.viewport) {
+    const { width, height } = pdf.viewport;
+
+    return `${width} × ${height ?? "auto"}`;
+  }
+
+  const name =
+    typeof pdf.size === "object"
+      ? `${Math.round(pdf.size.width)} × ${Math.round(pdf.size.height)}`
+      : (pdf.size ?? "a4").toUpperCase();
+
+  return pdf.landscape ? `${name} landscape` : name;
+}
+
+function imageSize({ width = 1200, height = 630 }: PlaygroundOptions): ImageSize {
+  return { width, height };
+}
+
+const fetchCache = new Map<string, Promise<ArrayBuffer>>();
+
+function postMessage(message: RenderMessageInput, transfer?: Transferable[]) {
+  return self.postMessage(message, { transfer });
+}
+
+// Dogfood: load Google Font subsets by content. Each subset registers under its family with
+// its `unicode-range`, so `font-family` routes per script and any leftover falls back. The
+// variable weight axis lets any `font-weight` render with a real face instead of faux bold.
+const GOOGLE_FONTS = FONT_FAMILIES.map((name) => ({ name, weight: "100..900" as const }));
+
+let renderer: Renderer | undefined;
+
+(async () => {
+  await init({ module_or_path: wasm });
+
+  renderer = new Renderer();
+
+  postMessage({ type: "ready" });
+})();
+
+// The wasm module is fetched the first time a template asks for a PDF.
+let pdfRenderer: Promise<PdfRenderer> | undefined;
+
+function loadPdfRenderer() {
+  pdfRenderer ??= initPdf({ module_or_path: pdfWasm }).then(() => new PdfRenderer());
+
+  return pdfRenderer;
+}
+
+// The paint module is fetched the first time the inspector asks for a tree.
+let painter: Promise<Painter> | undefined;
+
+function loadPainter() {
+  painter ??= initPaint({ module_or_path: paintWasm }).then(() => new Painter());
+
+  return painter;
+}
+
+/** Everything a render needs beyond the tree itself, fetched once per request. */
+async function loadResources(node: Node, css: CssEntry[]) {
+  const [images, fonts] = await Promise.all([
+    prepareImages<FetchedImage>({ node, fetchCache }),
+    googleFonts(GOOGLE_FONTS).catch(() => undefined),
+  ]);
+
+  return {
+    images,
+    fonts: fonts ?? [FALLBACK_FONT_URL],
+    css,
+    notice: fonts ? undefined : "Google Fonts unreachable · Latin fallback",
+  };
+}
+
+type Resources = Awaited<ReturnType<typeof loadResources>>;
+
+type RenderInput = Omit<Resources, "notice"> & {
+  renderer: Renderer;
+  node: Node;
+  options: PlaygroundOptions;
+  size: ImageSize;
+};
+
+type Output = {
+  buffer: Uint8Array;
+  kind: OutputKind;
+  format: string;
+};
+
+/** The latest single-frame render, kept so the inspector can paint the same input. */
+let lastImage: { id: number; input: Omit<RenderInput, "renderer" | "size"> } | undefined;
+
+/** The options pick the backend: a document, a timeline, or a single frame. */
+async function renderOutput({
+  renderer,
+  node,
+  options,
+  size,
+  images,
+  fonts,
+  css,
+}: RenderInput): Promise<Output> {
+  if (options.pdf) {
+    const pdf = await loadPdfRenderer();
+
+    return {
+      buffer: await pdf.render(node, {
+        ...options.pdf,
+        css,
+        images,
+        fonts,
+      }),
+      kind: "pdf",
+      format: "pdf",
+    };
+  }
+
+  if (options.animation) {
+    const { durationMs, fps = 30, format = "webp" } = options.animation;
+
+    return {
+      buffer: await renderer.renderAnimation({
+        scenes: [{ node, durationMs }],
+        width: size.width,
+        height: size.height,
+        format,
+        fps,
+        quality: options.quality,
+        devicePixelRatio: options.devicePixelRatio,
+        images,
+        fonts,
+        css,
+      }),
+      kind: "animation",
+      format,
+    };
+  }
+
+  return {
+    buffer: await renderer.render(node, { ...options, css, images, fonts }),
+    kind: "image",
+    format: options.format ?? "png",
+  };
+}
+
+async function renderRequest(renderer: Renderer, id: number, code: string) {
+  const { default: component, options } = await evaluateCodeExports(code, renderReact);
+  const element = renderReact.createElement(component as JSXElementConstructor<unknown>);
+  const { node, css: extractedCss } = await fromJsx(element);
+  const optionCss =
+    options.css === undefined || Array.isArray(options.css) ? options.css : [options.css];
+  const effectiveCss: CssEntry[] = optionCss ?? extractedCss;
+  const cssTexts = effectiveCss.map(cssEntryToText);
+  const size = imageSize(options);
+  const label = options.pdf ? pdfLabel(options.pdf) : `${size.width} × ${size.height}`;
+
+  // A PDF renders pages, which a single HTML flow cannot stand in for, so the
+  // playground gives the whole pane to the viewer instead.
+  if (!options.pdf) {
+    postMessage({
+      type: "preview-result",
+      id,
+      html: renderToStaticMarkup(element),
+      width: size.width,
+      height: size.height,
+      cssContents: cssTexts,
+      // The pane compiles utilities itself, so it needs the theme as declarations
+      // rather than as the `:root` rule the renderer reads.
+      theme: cssTexts
+        .flatMap((text) => [...text.matchAll(/:root\s*\{([^{}]*)\}/g)].map(([, body]) => body))
+        .join(""),
+    });
+  }
+
+  const emojified = extractEmojis(node, options.emoji ?? "twemoji");
+  const { notice, ...resources } = await loadResources(emojified, effectiveCss);
+  const start = performance.now();
+  const output = await renderOutput({ renderer, node: emojified, options, size, ...resources });
+  const duration = performance.now() - start;
+  const inspection = output.kind === "pdf" ? await inspectPdf(output.buffer) : undefined;
+
+  lastImage =
+    output.kind === "image" ? { id, input: { node: emojified, options, ...resources } } : undefined;
+
+  postMessage(
+    {
+      type: "render-result",
+      result: {
+        status: "success",
+        id,
+        outputBuffer: output.buffer,
+        duration,
+        outputKind: output.kind,
+        outputFormat: output.format,
+        label,
+        inspection,
+        notice,
+      },
+    },
+    [output.buffer.buffer],
+  );
+}
+
+async function inspectRequest(id: number) {
+  if (lastImage?.id !== id) throw new Error("a newer render replaced the one to inspect");
+
+  const { node, options, images, fonts, css } = lastImage.input;
+  const paintRenderer = await loadPainter();
+  const tree = await paintRenderer.paint(node, {
+    width: options.width,
+    height: options.height,
+    devicePixelRatio: options.devicePixelRatio,
+    images,
+    fonts,
+    css,
+  });
+
+  postMessage({
+    type: "inspect-result",
+    result: { status: "success", id, inspection: inspectPaint(tree) },
+  });
+}
+
+self.onmessage = async (event: MessageEvent) => {
+  const payload = messageSchema.parse(event.data);
+
+  switch (payload.type) {
+    case "render-request": {
+      if (!renderer) throw new Error("WASM is not ready yet!");
+
+      try {
+        await renderRequest(renderer, payload.id, payload.code);
+      } catch (error) {
+        postMessage({
+          type: "render-result",
+          result: {
+            status: "error",
+            id: payload.id,
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+        });
+      }
+
+      break;
+    }
+    case "inspect-request": {
+      try {
+        await inspectRequest(payload.id);
+      } catch (error) {
+        postMessage({
+          type: "inspect-result",
+          result: {
+            status: "error",
+            id: payload.id,
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+        });
+      }
+
+      break;
+    }
+    case "watchdog": {
+      const [port] = event.ports;
+
+      if (port) {
+        // The evaluated code shares this global but never sees `port`, so it
+        // cannot answer a ping while it holds the event loop.
+        port.onmessage = (ping: MessageEvent) => {
+          if (ping.data?.type === "ping") port.postMessage({ type: "pong", id: ping.data.id });
+        };
+        port.start();
+      }
+
+      break;
+    }
+    case "ready":
+    case "render-result":
+    case "preview-result":
+    case "inspect-result": {
+      throw new Error("Respond message should not be sent from main window.");
+    }
+    default: {
+      payload satisfies never;
+    }
+  }
+};

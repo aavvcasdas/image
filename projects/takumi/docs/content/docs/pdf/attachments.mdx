@@ -1,0 +1,79 @@
+---
+title: Attachments
+description: Embed files in PDF documents and configure PDF/A-3 attachments for electronic invoices.
+icon: Paperclip
+---
+
+Pass files through `attachments` to include source data, supporting documents, or invoice XML. Readers can access them in PDF viewers that expose an attachment panel:
+
+```tsx twoslash title="Attachments"
+import type { ReactNode } from "react";
+declare const invoice: ReactNode;
+declare const xml: string;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(invoice, {
+  // [!code highlight]
+  attachments: [
+    {
+      name: "factur-x.xml",
+      data: xml,
+      mimeType: "application/xml",
+      description: "Factur-X invoice data",
+      relationship: "alternative",
+    },
+  ],
+});
+```
+
+`data` takes raw bytes as a `Uint8Array`, or a string encoded as UTF-8.
+
+`relationship` describes the attachment's role and is written as `AFRelationship`:
+
+| Value           | Meaning                                          |
+| --------------- | ------------------------------------------------ |
+| `"source"`      | The document was created from this file.         |
+| `"alternative"` | An alternative representation of the document.   |
+| `"data"`        | The file backs a visual presentation in the PDF. |
+| `"supplement"`  | Additional resources for the document.           |
+| `"unspecified"` | No clear relationship. The default.              |
+
+## Electronic invoices
+
+For a Factur-X or ZUGFeRD document, use PDF/A-3 and attach the invoice XML. This example shows the attachment configuration:
+
+```tsx twoslash title="Electronic invoices"
+import type { ReactNode } from "react";
+declare const invoice: ReactNode;
+declare const xml: string;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(invoice, {
+  // [!code highlight]
+  pdfa: "3b",
+  metadata: { title: "Invoice 1042", creationDate: "2026-08-06" },
+  attachments: [
+    {
+      name: "factur-x.xml",
+      data: xml,
+      mimeType: "application/xml",
+      description: "Factur-X invoice data",
+      relationship: "alternative",
+    },
+  ],
+});
+```
+
+The PDF/A-3 levels require three fields on each attachment:
+
+- `mimeType`
+- `description`
+- a modification date: `modificationDate`, or the `metadata.creationDate` fallback
+
+The render fails if required attachment metadata is missing.
+
+Invalid combinations are **TypeScript type errors**. The PDF/A-2 levels and `"4"` forbid attachments. Use `"4f"` to attach files to a PDF 2.0 archival document. The PDF/A-3 levels require `mimeType` and `description` on each one.
+
+This configuration alone does not validate the invoice XML or its profile. Add the profile's XMP metadata and validate the result as described in [Invoices](/docs/pdf/invoices).

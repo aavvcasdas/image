@@ -1,0 +1,71 @@
+---
+title: Nuxt
+description: Generate Open Graph images from Vue templates with the Takumi renderer in Nuxt OG Image.
+---
+
+[Nuxt OG Image](https://nuxtseo.com/docs/og-image/getting-started/introduction) renders Vue components as OG images. Its [Takumi renderer](https://nuxtseo.com/docs/og-image/renderers/takumi) drives Takumi from a Vue template.
+
+<Steps>
+  <Step>
+    ### Install Nuxt OG Image and the Takumi binding
+
+    Add the Nuxt module, then the Takumi package that matches your runtime.
+
+    ```npm
+    npx nuxt module add og-image
+    ```
+
+    | Runtime | Package |
+    | --- | --- |
+    | Node | `@takumi-rs/core` |
+    | Edge (Cloudflare Workers, Vercel Edge) | `@takumi-rs/wasm` |
+
+    ```npm
+    npm install @takumi-rs/core
+    ```
+
+  </Step>
+  <Step>
+    ### Create a `.takumi.vue` template
+
+    Nuxt OG Image picks the Takumi renderer from the `.takumi.vue` suffix. No config is needed.
+
+    <Callout>Disable Takumi with `ogImage.compatibility.runtime.takumi = false` in `nuxt.config.ts`.</Callout>
+
+    ```vue title="components/OgImage/BlogPost.takumi.vue"
+    <script setup lang="ts">
+    defineProps<{
+      title: string;
+      description?: string;
+    }>();
+    </script>
+
+    <template>
+      <div class="w-full h-full flex flex-col justify-center bg-gray-950 text-white p-16">
+        <p class="text-6xl font-bold leading-tight">
+          {{ title }}
+        </p>
+        <p v-if="description" class="mt-6 text-2xl text-gray-400">
+          {{ description }}
+        </p>
+      </div>
+    </template>
+    ```
+
+  </Step>
+  <Step>
+    ### Attach the template to a page
+
+    Use `defineOgImageComponent()` in the page that should emit the image.
+
+    ```vue title="pages/blog/[slug].vue"
+    <script setup lang="ts">
+    defineOgImageComponent("BlogPost", {
+      title: "Takumi + Nuxt",
+      description: "Render OG images with Nuxt OG Image.",
+    });
+    </script>
+    ```
+
+  </Step>
+</Steps>

@@ -1,0 +1,5833 @@
+//! PDF byte-golden fixtures.
+//!
+//! Every case renders twice (guarding against nondeterministic output) and
+//! writes the result to `tests/fixtures-generated/<name>.pdf`. The goldens are
+//! committed; CI's dirty-tree check catches drift, so a changed .pdf in `git
+//! diff` is a real rendering change to review.
+
+use std::{
+  collections::{HashMap, HashSet},
+  fs,
+  io::Read,
+  path::Path,
+  sync::Arc,
+};
+
+use flate2::read::ZlibDecoder;
+use takumi_core::{
+  Fonts,
+  layout::node::{ImageData, ImageSourceInput, Node, NodeKind, RgbaImage},
+  resources::{
+    font::{FontOverride, FontResource},
+    image::{ImageCacheMode, ImageSource, ResourceCache},
+    image_buffer::ImageBuffer,
+    unicode_range::{UnicodeRange, UnicodeRangeSet},
+  },
+  style::{
+    BreakBetween, Color, ColorInput, Display, FlexDirection, FontSize, Length::*, LineHeight,
+    ListStyleType, ObjectFit, Style, StyleDeclaration, StyleSheet,
+  },
+  viewport::Viewport,
+};
+use takumi_html::{FromHtmlOptions, from_html};
+use takumi_pdf::{
+  Attachment, AttachmentRelationship, Band, MeasureOptions, PageBand, PageMargin, PageMargins,
+  PageOptions, PageOverride, PageRange, PageRules, PdfDate, PdfError, PdfMetadata, PdfOptions,
+  PdfStandard, Tagging, UncoveredText, XmpProperty, XmpSchema, measure, render,
+};
+
+fn latin_font() -> Fonts {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"),
+  )
+  .expect("read latin font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load latin font");
+  fonts
+}
+
+fn fonts() -> Fonts {
+  let mut fonts = Fonts::default();
+
+  for path in [
+    "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+
+    fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+  }
+  fonts
+}
+
+/// A4 with 36px margins, the bottom one as tall as the invoice footer needs.
+fn invoice_page() -> PageOptions {
+  PageOptions {
+    margin: PageMargins {
+      bottom: PageMargin::Auto,
+      ..PageMargins::uniform(36.0)
+    },
+    ..PageOptions::A4
+  }
+}
+
+fn html_fixture(name: &str) -> Node {
+  let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    .join("fixtures")
+    .join(name);
+  let source = fs::read_to_string(path).expect("read html fixture");
+
+  from_html(&source, FromHtmlOptions::default()).expect("parse html fixture")
+}
+
+/// Renders the case twice, asserts determinism, writes the golden, and
+/// returns the bytes.
+fn run_pdf_fixture(name: &str, build: impl Fn(&Fonts) -> PdfOptions<'_>) -> Vec<u8> {
+  run_pdf_fixture_with(name, &fonts(), build)
+}
+
+/// Keeps the goldens off the crate version the real producer carries.
+const FIXTURE_PRODUCER: &str = "takumi-pdf fixture";
+
+fn pin_producer(options: &mut PdfOptions<'_>) {
+  options
+    .producer
+    .get_or_insert_with(|| FIXTURE_PRODUCER.to_string());
+}
+
+/// Renders options the way [`run_pdf_fixture`] does, for the tests that compare
+/// a golden against a second document.
+fn render_pinned(mut options: PdfOptions<'_>) -> Vec<u8> {
+  pin_producer(&mut options);
+  render(options).expect("render pdf")
+}
+
+fn run_pdf_fixture_with(
+  name: &str,
+  fonts: &Fonts,
+  build: impl Fn(&Fonts) -> PdfOptions<'_>,
+) -> Vec<u8> {
+  let mut once = build(fonts);
+  let mut twice = build(fonts);
+
+  pin_producer(&mut once);
+  pin_producer(&mut twice);
+
+  let first = render(once).expect("render pdf fixture");
+  let second = render(twice).expect("render pdf fixture again");
+
+  assert_eq!(first, second, "nondeterministic pdf output for {name}");
+  assert!(first.starts_with(b"%PDF-"), "not a pdf: {name}");
+
+  let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures-generated");
+
+  fs::create_dir_all(&dir).expect("create golden directory");
+  fs::write(dir.join(format!("{name}.pdf")), &first).expect("write pdf golden");
+  first
+}
+
+fn text(content: &str, size: f32) -> Node {
+  Node::text(content.to_string()).with_style(
+    Style::default()
+      .with(StyleDeclaration::color(ColorInput::Value(Color([
+        20, 20, 20, 255,
+      ]))))
+      .with(StyleDeclaration::font_size(FontSize::Length(Px(size)))),
+  )
+}
+
+fn column(children: Vec<Node>) -> Node {
+  Node::container(children).with_style(
+    Style::default()
+      .with(StyleDeclaration::display(Display::Flex))
+      .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+      .with(StyleDeclaration::width(Percentage(100.0))),
+  )
+}
+
+#[test]
+fn text_basic() {
+  run_pdf_fixture("text-basic", |fonts| {
+    PdfOptions::builder()
+      .node(
+        Node::container([text("Hello PDF from Takumi", 32.0)]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0)))
+            .with(StyleDeclaration::background_color(ColorInput::Value(
+              Color([235, 244, 255, 255]),
+            ))),
+        ),
+      )
+      .viewport(Viewport::new((600, 300)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+#[test]
+fn media_print_applies_to_pdf_output() {
+  const PRINTED: &str = ".card { background-color: rgb(20, 120, 60); }";
+
+  let sheet = |css: &str| Arc::new(StyleSheet::parse(css).expect("parse stylesheet"));
+  let card = || {
+    Node::container([text("Hello print", 32.0)])
+      .with_class_name("card")
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::height(Percentage(100.0))),
+      )
+  };
+  fn options(fonts: &Fonts, node: Node, sheet: Arc<StyleSheet>) -> PdfOptions<'_> {
+    PdfOptions::builder()
+      .node(node)
+      .stylesheet(sheet)
+      .viewport(Viewport::new((600, 300)))
+      .fonts(fonts)
+      .build()
+  }
+
+  let fonts = fonts();
+  let printed = run_pdf_fixture_with("media-print", &fonts, |fonts| {
+    options(
+      fonts,
+      card(),
+      sheet(&format!("@media print {{ {PRINTED} }}")),
+    )
+  });
+
+  assert_eq!(
+    printed,
+    render_pinned(options(&fonts, card(), sheet(PRINTED))),
+    "`@media print` must apply to PDF output"
+  );
+  assert_ne!(
+    printed,
+    render_pinned(options(
+      &fonts,
+      card(),
+      sheet(&format!("@media screen {{ {PRINTED} }}"))
+    )),
+    "`@media screen` must not apply to PDF output"
+  );
+}
+
+#[test]
+fn text_ligatures() {
+  run_pdf_fixture("text-ligatures", |fonts| {
+    PdfOptions::builder()
+      .node(
+        Node::container([text("Difficult office traffic affix", 24.0)]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0))),
+        ),
+      )
+      .viewport(Viewport::new((600, 100)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// An inline `<span>` with a background paints a rounded fragment under its
+/// text, padding included.
+#[test]
+fn inline_span_background() {
+  let pdf = run_pdf_fixture("inline-span-background", |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 10px; width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; color: #141414">
+      <p style="margin: 0">Due <span style="background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 9999px">August 31</span> at noon.</p>
+      <p style="margin: 0; width: 190px">Wraps: <span style="background-color: #dcfce7; padding: 2px 6px; border-radius: 6px">green badge text long enough to wrap</span> done.</p>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse badge fixture"))
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("0.9961 0.8863 0.8863 rg"),
+    "the pill's background color is missing from the content stream"
+  );
+}
+
+/// An inline `<span>`'s gradient lays over the strip its fragments make across lines, and a span
+/// with `background-clip: text` shows its gradient through its glyphs.
+#[test]
+fn inline_span_background_image() {
+  let pdf = run_pdf_fixture("inline-span-background-image", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; line-height: 1.6; color: #141414">
+      <div style="width: 220px">Ship <span style="padding: 0 6px; background-image: linear-gradient(90deg, #facc15, #ec4899)">a sliced gradient across lines</span> today</div>
+      <div style="font-size: 32px; font-weight: 700">Make it <span style="background-image: linear-gradient(90deg, #6366f1, #ec4899); background-clip: text; color: transparent">shine</span></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse gradient fixture"))
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.matches(" scn").count() >= 2,
+    "the span gradients are missing from the content stream"
+  );
+
+  let fonts = fonts();
+  let clipped = render_pinned(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r##"<div style="font-size: 32px">Make it <span style="background-image: linear-gradient(90deg, #6366f1, #ec4899); background-clip: text; color: transparent">shine</span></div>"##,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse clip-text fixture"),
+      )
+      .viewport(Viewport::new((420, 100)))
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(
+    inflated_text(&clipped).contains(" scn"),
+    "the clip-text span's gradient does not fill its glyphs"
+  );
+}
+
+/// Nested `background-clip: text` spans each show their background through their glyphs, outer
+/// first, under an inner span's own background.
+#[test]
+fn inline_span_background_clip_text_nested() {
+  run_pdf_fixture("inline-span-background-clip-text-nested", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 32px; font-weight: 700; color: #141414">
+      <div><span style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent">Base <span style="background-image: linear-gradient(180deg, transparent 50%, #facc15 50%); background-clip: text">over</span> <span style="background-clip: text">bare</span></span></div>
+      <div><span style="background-image: linear-gradient(90deg, #16a34a, #0891b2); background-clip: text; color: transparent">Clip <span style="background-color: #fee2e2">boxed</span></span></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse nested clip-text fixture"))
+      .viewport(Viewport::new((420, 140)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A `background-clip: text` span shows its background through its decorations and its
+/// `-webkit-text-stroke` too, whatever their colour.
+#[test]
+fn inline_span_background_clip_text_decoration() {
+  run_pdf_fixture("inline-span-background-clip-text-decoration", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 32px; font-weight: 700; line-height: 1.5">
+      <div><span style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent; text-decoration: underline 4px">Underlined</span></div>
+      <div><span style="background-image: linear-gradient(90deg, #16a34a, #0891b2); background-clip: text; color: transparent; text-decoration: line-through wavy 3px">Wavy strike</span></div>
+      <div><span style="background-image: linear-gradient(90deg, #ea580c, #9333ea); background-clip: text; color: transparent; -webkit-text-stroke: 4px transparent">Stroked</span></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(
+        from_html(source, FromHtmlOptions::default()).expect("parse clip-text decoration fixture"),
+      )
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A block with `background-clip: text` shows its background through the text of every box inside
+/// it, under a child's own background, and before its text shadows.
+#[test]
+fn background_clip_text_descendants() {
+  run_pdf_fixture("background-clip-text-descendants", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.4">
+      <div style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent; text-shadow: 2px 2px 0 rgba(15, 23, 42, 0.35)">
+        <div>Nested block</div>
+        <div><span style="display: inline-block; padding: 0 6px">Inline block</span> <span style="text-decoration: underline 3px">line</span></div>
+        <div style="background-color: #fee2e2">Own background</div>
+      </div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(
+        from_html(source, FromHtmlOptions::default()).expect("parse clip-text descendants fixture"),
+      )
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A `background-clip: text` block shows its background through the text of a box at zero opacity
+/// or under a non-invertible transform, but not through a float in a layer of its own or an
+/// out-of-flow box whose containing block is outside it.
+#[test]
+fn background_clip_text_reach() {
+  run_pdf_fixture("background-clip-text-reach", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1.4">
+      <div style="background-image: linear-gradient(90deg, #2563eb, #db2777); background-clip: text; color: transparent">
+        <div style="float: right">Float</div>
+        <div style="float: right; opacity: 0.5">Layered</div>
+        <div style="opacity: 0">Zero opacity</div>
+        <div style="transform: scale(0)">Scale zero</div>
+        <div style="position: absolute; left: 240px; top: 60px">Outside</div>
+      </div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse clip-text reach fixture"))
+      .viewport(Viewport::new((420, 200)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A `box-decoration-break: clone` span repeats its border and padding on every line it wraps
+/// onto, and each line makes room for the repeated start edge.
+#[test]
+fn inline_span_box_decoration_break_clone() {
+  run_pdf_fixture("inline-span-box-decoration-break-clone", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; line-height: 2; color: #141414">
+      <div style="width: 220px">Ship <span style="padding: 2px 10px; border: 3px solid #2563eb; border-radius: 8px; background-color: #dbeafe; box-decoration-break: clone">a cloned badge that wraps across lines</span> today</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse clone fixture"))
+      .viewport(Viewport::new((320, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// An inline `<span>` with a border strokes it on every line, without the sides the line wraps at.
+#[test]
+fn inline_span_border() {
+  let pdf = run_pdf_fixture("inline-span-border", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 12px; background-color: #ffffff; font-size: 18px; line-height: 2; color: #141414">
+      Due <span style="border: 2px solid #16a34a">August 31</span> at noon, <span style="border: 2px dashed #e11d48; padding: 0 4px; background-color: #fee2e2">a dashed border long enough to wrap</span> done.
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse border fixture"))
+      .viewport(Viewport::new((320, 140)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("0.0863 0.6392 0.2902 rg") || haystack.contains("0.0863 0.6392 0.2902 RG"),
+    "the solid border's color is missing from the content stream"
+  );
+}
+
+#[test]
+fn paged_lines() {
+  run_pdf_fixture("paged-lines", |fonts| {
+    let lines = (1..=40)
+      .map(|i| text(&format!("Line {i} of the paginated report body"), 16.0))
+      .collect();
+
+    PdfOptions::builder()
+      .node(column(lines))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+#[test]
+fn paged_footer_counters() {
+  run_pdf_fixture("paged-footer", |fonts| {
+    let rows = (1..=40).map(|i| text(&format!("Row {i}"), 16.0)).collect();
+
+    PdfOptions::builder()
+      .node(column(rows))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .footer(
+        from_html(
+          r#"<div style="display: flex; column-gap: 3px; font-size: 12px; color: #141414;">
+            Page <span class="pageNumber"></span> of <span class="totalPages"></span>,
+            page <span class="pageNumber muted trad-chinese-informal"></span> in Chinese,
+            <span class="pageNumber lower-roman"></span> in roman
+          </div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse footer fixture"),
+      )
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// `page_ranges` keeps pages 1 and 3 of a three-page report. The footer
+/// counters keep their full-output numbers, so the two pages read
+/// "Page 1 of 3" and "Page 3 of 3".
+#[test]
+fn paged_page_ranges() {
+  fn document<'f>(fonts: &'f Fonts, ranges: Option<Vec<PageRange>>) -> PdfOptions<'f> {
+    let rows = (1..=40).map(|i| text(&format!("Row {i}"), 16.0)).collect();
+    let mut options = PdfOptions::builder()
+      .node(column(rows))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .footer(
+        from_html(
+          r#"<div style="display: flex; column-gap: 3px; font-size: 12px; color: #141414;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse footer fixture"),
+      )
+      .fonts(fonts)
+      .build();
+
+    options.page_ranges = ranges;
+    options
+  }
+  let ranged = run_pdf_fixture("paged-page-ranges", |fonts| {
+    document(
+      fonts,
+      Some(vec![
+        PageRange::single(1),
+        PageRange {
+          from: Some(3),
+          to: Some(3),
+        },
+      ]),
+    )
+  });
+  let full = render_pinned(document(&fonts(), None));
+
+  assert_eq!(
+    page_count(&full),
+    3,
+    "the full report paginates to three pages"
+  );
+  assert_eq!(page_count(&ranged), 2, "the ranges keep two of them");
+  assert_ne!(ranged, full);
+}
+
+/// An internal link whose target page is dropped loses its annotation, and an
+/// outline entry on a dropped page loses its node.
+#[test]
+fn page_ranges_drop_destinations_to_dropped_pages() {
+  let fonts = fonts();
+  let source = r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
+    <a href="#alpha" style="display: flex;">see alpha</a>
+    <h1 style="font-size: 18px; margin: 0;">First</h1>
+    <div id="alpha" style="display: flex; break-before: page;"><h1 style="font-size: 18px; margin: 0;">Alpha</h1></div>
+  </div>"##;
+  let document = |ranges: Option<Vec<PageRange>>| {
+    let mut options = PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        width: 320.0,
+        height: 240.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .outline(true)
+      .tagged(Tagging::Off)
+      .fonts(&fonts)
+      .build();
+
+    options.page_ranges = ranges;
+    render(options).expect("render the doc")
+  };
+  let full = document(None);
+  let first_only = document(Some(vec![PageRange::single(1)]));
+  let links = |pdf: &[u8]| {
+    String::from_utf8_lossy(pdf)
+      .matches("/Subtype/Link")
+      .count()
+  };
+  let titles = |pdf: &[u8]| String::from_utf8_lossy(pdf).matches("/Title").count();
+
+  assert_eq!(links(&full), 1, "the full render annotates the link");
+  assert_eq!(
+    links(&first_only),
+    0,
+    "a link to a dropped page loses its annotation"
+  );
+  assert_eq!(titles(&full), 2, "the full outline lists both headings");
+  assert_eq!(
+    titles(&first_only),
+    1,
+    "the outline keeps only the heading on a kept page"
+  );
+}
+
+#[test]
+fn page_ranges_selecting_no_page_reject_the_render() {
+  let fonts = fonts();
+  let mut options = PdfOptions::builder()
+    .node(column(vec![text("short", 16.0)]))
+    .page(PageOptions::A4)
+    .fonts(&fonts)
+    .build();
+
+  options.page_ranges = Some(vec![PageRange {
+    from: Some(99),
+    to: None,
+  }]);
+  assert!(matches!(
+    render(options),
+    Err(PdfError::PageRangesOutOfBounds(1))
+  ));
+}
+
+/// A `<table>` from markup: element presets, group reordering, a declared
+/// column width, and rows split across pages.
+#[test]
+fn paged_table() {
+  run_pdf_fixture("paged-table", |fonts| {
+    let rows: String = (1..=30)
+      .map(|i| {
+        format!(
+          "<tr><td>Item {i}</td><td>Description of item {i}</td><td>{}</td></tr>",
+          i * 3
+        )
+      })
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <tfoot><tr><td colspan="2">Total</td><td>1395</td></tr></tfoot>
+        <tbody>{rows}</tbody>
+        <thead><tr style="background: #e2e8f0"><th>Name</th><th>Description</th><th style="width: 48px">Qty</th></tr></thead>
+      </table>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-break-3 §7: the legacy `page-break-*` names drive the same pagination
+/// as `break-*`.
+#[test]
+fn legacy_page_break_properties_split_the_page() {
+  run_pdf_fixture("legacy-page-break", |fonts| {
+    let filler: String = (1..=8)
+      .map(|i| format!("<p style=\"margin: 0\">line {i}</p>"))
+      .collect();
+    let html = format!(
+      r#"<div style="font-size: 12px; color: #141414">
+        <div style="page-break-after: always">first page</div>
+        <div>{filler}</div>
+        <div style="page-break-inside: avoid; background: #e2e8f0; padding: 8px">
+          <p style="margin: 0">kept together</p>
+          <p style="margin: 0">across the break</p>
+          <p style="margin: 0">by page-break-inside</p>
+        </div>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse legacy page breaks"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 160.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// CSS 2.2 §17.6.2: a collapsing table paints one border per shared line, the
+/// wider one takes the intersection, and `hidden` clears the line. The last
+/// table pins the naive edge: a spanning cell resolves one winner for its
+/// whole side, so the 4px border under one column reaches both segments.
+#[test]
+fn a_collapsing_table_paints_one_border_per_line() {
+  run_pdf_fixture("collapsed-table", |fonts| {
+    let cell = "border: 1px solid #94a3b8; padding: 4px 8px";
+    let html = format!(
+      r#"<div style="font-size: 12px; color: #141414; display: flex; flex-direction: column; gap: 16px">
+        <table style="border-collapse: collapse">
+          <thead><tr><th style="{cell}; border-bottom-width: 3px; background: #e2e8f0">Name</th><th style="{cell}; border-bottom-width: 3px; background: #e2e8f0">Qty</th></tr></thead>
+          <tbody>
+            <tr><td style="{cell}">alpha</td><td style="{cell}">1</td></tr>
+            <tr style="border-top: 2px solid #dc2626"><td style="{cell}">beta</td><td style="{cell}">2</td></tr>
+          </tbody>
+        </table>
+        <table style="border-collapse: collapse; border: 4px solid #2563eb">
+          <tr><td style="{cell}" colspan="2">spans both columns</td><td style="{cell}" rowspan="2">tall</td></tr>
+          <tr><td style="{cell}">left</td><td style="{cell}; border-right-style: hidden">right</td></tr>
+        </table>
+        <table style="border-collapse: collapse">
+          <tr><td style="{cell}; border-bottom: 4px solid #dc2626">thick</td><td style="{cell}">thin</td></tr>
+          <tr><td style="{cell}" colspan="2">one winner spans both segments</td></tr>
+        </table>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse collapsed table"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 320.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-backgrounds-3 §border-style: each side paints its own style, so a
+/// dashed or dotted side keeps its pattern beside sides of other styles.
+#[test]
+fn mixed_border_sides_keep_their_styles() {
+  run_pdf_fixture("border-mixed-sides", |fonts| {
+    let html = r#"<div style="display: flex; gap: 24px">
+      <div style="width: 140px; height: 90px; border-width: 8px; border-style: dashed dotted solid double; border-color: #dc2626 #2563eb #16a34a #9333ea"></div>
+      <div style="width: 140px; height: 90px; border-width: 10px; border-style: dotted solid dashed groove; border-color: #0f172a #f59e0b #0f172a #64748b; border-radius: 24px"></div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse mixed borders"))
+      .page(PageOptions {
+        width: 420.0,
+        height: 170.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// css-tables-3 §repeated-headers: every page that starts inside the table's
+/// body paints the header rows again.
+#[test]
+fn a_table_header_repeats_on_every_page() {
+  let fonts = fonts();
+  let table = |thead_style: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead{thead_style}><tr><th>Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let repeating = table("");
+  // A `table-row-group` header is not a header group, so nothing repeats.
+  let plain = table(r#" style="display: table-row-group""#);
+  let pages = page_count(&repeating);
+
+  assert!(pages > 1, "the table did not paginate");
+  assert_eq!(
+    text_show_operators(&repeating),
+    text_show_operators(&plain) + 2 * (pages - 1),
+    "each continuation page repeats the two header cells"
+  );
+}
+
+/// The replay clips to the table, so content beside it in the header's band
+/// of the page stays on the page it belongs to.
+#[test]
+fn content_beside_a_table_does_not_replay_with_its_header() {
+  let fonts = fonts();
+  let table = |beside: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<div style="display: flex; font-size: 12px; color: #141414">
+        <table style="width: 280px">
+          <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+        {beside}
+      </div>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let with_sidebar = table("<div>Beside</div>");
+  let plain = table("");
+
+  assert_eq!(
+    text_show_operators(&with_sidebar),
+    text_show_operators(&plain) + 1,
+    "the sidebar replayed with the table header"
+  );
+}
+
+/// A header cell whose rowspan reaches into the body would replay body area
+/// with the band, so such a table does not repeat at all.
+#[test]
+fn a_header_rowspan_into_the_body_suppresses_repetition() {
+  let fonts = fonts();
+  let table = |thead_style: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        <thead{thead_style}><tr><th rowspan="2">Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+
+  assert_eq!(
+    text_show_operators(&table("")),
+    text_show_operators(&table(r#" style="display: table-row-group""#)),
+    "a cross-group rowspan header still repeated"
+  );
+}
+
+/// A top caption sits between the table edge and the header rows; only the
+/// header rows repeat.
+#[test]
+fn a_top_caption_does_not_repeat_with_the_header() {
+  let fonts = fonts();
+  let table = |caption: &str| {
+    let rows: String = (1..=30)
+      .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+      .collect();
+    let html = format!(
+      r#"<table style="width: 100%; font-size: 12px; color: #141414">
+        {caption}
+        <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>"#
+    );
+
+    render(
+      PdfOptions::builder()
+        .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render table")
+  };
+  let with_caption = table("<caption>Inventory</caption>");
+  let plain = table("");
+
+  assert_eq!(
+    text_show_operators(&with_caption),
+    text_show_operators(&plain) + 1,
+    "the caption repeated with the header"
+  );
+}
+
+/// A replayed header is an artifact: the occurrence where the table begins
+/// carries the tags, and a second marked occurrence would double the reading
+/// order.
+#[test]
+fn a_repeated_table_header_replays_as_an_artifact() {
+  let rows: String = (1..=30)
+    .map(|i| format!("<tr><td>Item {i}</td><td>{}</td></tr>", i * 3))
+    .collect();
+  let html = format!(
+    r#"<table style="width: 100%; font-size: 12px; color: #141414">
+      <thead><tr><th>Name</th><th>Qty</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse table"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render tagged table");
+
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("/Artifact"),
+    "the replayed header is not marked as an artifact"
+  );
+  // ISO 14289-2:2024 §8.2.2: a table spanning pages is one Table element.
+  assert_eq!(
+    haystack.matches("/S/Table").count(),
+    1,
+    "the page-spanning table split into multiple Table elements"
+  );
+}
+
+/// A footer narrow enough that three-digit counters wrap it to a second line.
+/// The band re-measures with the real page count, so the `auto` margin
+/// reserves one line, not a wrapped stand-in's two.
+#[test]
+fn band_measures_with_the_real_page_count() {
+  run_pdf_fixture("paged-band-remeasure", |fonts| {
+    let rows = (1..=12).map(|i| text(&format!("Row {i}"), 16.0)).collect();
+
+    PdfOptions::builder()
+      .node(column(rows))
+      .page(PageOptions {
+        width: 320.0,
+        height: 240.0,
+        margin: PageMargins::default(),
+      })
+      .footer(
+        from_html(
+          r#"<div style="width: 90px; font-size: 14px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse footer fixture"),
+      )
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Guards `widows` / `orphans`: the default 2/2 minimums must move a line
+/// across the page cut that minimums of 1/1 leave in place.
+#[test]
+fn paged_widow_orphan_control() {
+  use takumi_core::style::MinLines;
+
+  let fonts = fonts();
+  let document = |relaxed: bool| {
+    let rows: Vec<Node> = (1..=12).map(|i| text(&format!("Row {i}"), 16.0)).collect();
+    let paragraph = Node::text(
+      "The closing paragraph runs long enough to wrap into several lines \
+       and straddle the page boundary, which is exactly where the widow \
+       and orphan minimums earn their keep in a paginated report."
+        .to_string(),
+    )
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::color(ColorInput::Value(Color([
+          20, 20, 20, 255,
+        ]))))
+        .with(StyleDeclaration::font_size(FontSize::Length(Px(16.0))))
+        .with(StyleDeclaration::line_height(LineHeight::Unitless(1.8))),
+    );
+    let mut children = rows;
+
+    children.push(paragraph);
+    let root = column(children);
+
+    if relaxed {
+      // Inherited minimums of one restore the unconstrained cut.
+      root.with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+          .with(StyleDeclaration::width(Percentage(100.0)))
+          .with(StyleDeclaration::widows(MinLines::from(1)))
+          .with(StyleDeclaration::orphans(MinLines::from(1))),
+      )
+    } else {
+      root
+    }
+  };
+  fn page() -> PageOptions {
+    PageOptions {
+      width: 400.0,
+      height: 300.0,
+      margin: PageMargins::uniform(20.0),
+    }
+  }
+  let strict = run_pdf_fixture_with("paged-widows-orphans", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(document(false))
+      .page(page())
+      .fonts(fonts)
+      .build()
+  });
+  let relaxed = render(
+    PdfOptions::builder()
+      .node(document(true))
+      .page(page())
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render relaxed variant");
+
+  assert_ne!(
+    strict, relaxed,
+    "default widow/orphan minimums did not move any line across the cut"
+  );
+}
+
+/// A page writes only the clips and groups of the boxes it shows, not empty
+/// ones for every box on the other pages.
+#[test]
+fn a_page_skips_the_clips_of_other_pages() {
+  const BOXES: usize = 12;
+
+  let boxes = r#"<div style="overflow:hidden;height:40px;margin-bottom:10px;break-inside:avoid;border:1px solid #888"><div style="opacity:0.5">clipped</div></div>"#
+    .repeat(BOXES);
+  let pdf = run_pdf_fixture("paged-offpage-clips", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&boxes, FromHtmlOptions::default()).expect("parse boxes"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let clips = content_lines(&pdf)
+    .filter(|line| line == b"W" || line == b"W*")
+    .count();
+
+  assert!(page_count(&pdf) > 1);
+  // One clip per page window, and a box's two clips on its own page only.
+  assert_eq!(clips, page_count(&pdf) + 2 * BOXES);
+}
+
+/// A paragraph taller than a page starts on the first page below its margin:
+/// its line boxes meet edge to edge, so a cut between two of them moves
+/// neither.
+#[test]
+fn a_long_paragraph_starts_on_the_first_page() {
+  let doc = format!("<p>{}</p>", "Lorem ipsum dolor sit amet. ".repeat(200));
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse paragraph"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(&fonts())
+      .build(),
+  );
+
+  // Page content is ASCII, unlike the embedded font that can spell `]TJ` too.
+  let pages_with_text = content_streams(&pdf)
+    .iter()
+    .filter(|stream| stream.is_ascii() && find(stream, b"]TJ").is_some())
+    .count();
+
+  assert!(page_count(&pdf) > 1);
+  assert_eq!(pages_with_text, page_count(&pdf), "a page is blank");
+}
+
+#[test]
+fn paged_breaks() {
+  run_pdf_fixture("paged-breaks", |fonts| {
+    let section = |title: &str| {
+      column(
+        (1..=3)
+          .map(|i| text(&format!("{title} row {i}"), 14.0))
+          .collect(),
+      )
+      .with_style(
+        Style::default()
+          .with(StyleDeclaration::display(Display::Flex))
+          .with(StyleDeclaration::flex_direction(FlexDirection::Column))
+          .with(StyleDeclaration::break_before(BreakBetween::Page)),
+      )
+    };
+
+    PdfOptions::builder()
+      .node(column(vec![section("Alpha"), section("Beta")]))
+      .page(PageOptions {
+        width: 400.0,
+        height: 400.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// The anonymous box a text child lays out in used to copy `break-after` from
+/// its parent, cutting a second time at the parent's content edge and leaving
+/// the padding below it on a page of its own.
+#[test]
+fn break_after_a_padded_box_cuts_once() {
+  let fonts = fonts();
+  let source = r#"<div style="display: flex; flex-direction: column;">
+    <div style="display: flex; padding-bottom: 64px; break-after: page;">One</div>
+    <div style="display: flex;">Two</div>
+  </div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(
+    String::from_utf8_lossy(&pdf).matches("/Count 2").count(),
+    1,
+    "expected the break to cut once"
+  );
+}
+
+fn page_count(pdf: &[u8]) -> usize {
+  let text = String::from_utf8_lossy(pdf);
+  let start = text.find("/Type/Pages/Count ").expect("a page tree") + "/Type/Pages/Count ".len();
+  let digits: String = text[start..]
+    .chars()
+    .take_while(char::is_ascii_digit)
+    .collect();
+
+  digits.parse().expect("a page count")
+}
+
+/// The second keep already opens page 2 with the list's spacing consumed at
+/// the boundary, so a forced break on it must not open a page between the two.
+#[test]
+fn a_forced_break_on_a_node_that_opens_a_page_adds_no_empty_page() {
+  let fonts = fonts();
+  let page = || PageOptions {
+    width: 400.0,
+    height: 300.0,
+    margin: PageMargins::uniform(20.0),
+  };
+  let document = |spacer: u32, list: &str, first: &str, second: &str| {
+    format!(
+      r#"<div style="display: flex; flex-direction: column;">
+        <div style="height: {spacer}px; width: 100px;"><span style="font-size: 10px;">A</span></div>
+        <div style="display: flex; flex-direction: column; {list}">
+          <div style="display: flex; flex-direction: column; break-inside: avoid; {first}"><span style="font-size: 10px; line-height: 1.4;">B1</span></div>
+          <div style="display: flex; flex-direction: column; break-inside: avoid; {second}"><span style="font-size: 10px; line-height: 1.4;">B2</span></div>
+        </div>
+      </div>"#
+    )
+  };
+  let render_with = |source: &str| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+        .page(page())
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render the doc")
+  };
+  let plain = render_with(&document(235, "gap: 16px;", "", ""));
+
+  assert_eq!(
+    page_count(&plain),
+    2,
+    "the second keep opens page 2 on its own"
+  );
+
+  for (spacer, list, first, second) in [
+    (235, "gap: 16px;", "", "break-before: page;"),
+    (235, "", "", "margin-top: 16px; break-before: page;"),
+    (245, "padding-top: 16px;", "break-before: page;", ""),
+  ] {
+    let forced = render_with(&document(spacer, list, first, second));
+
+    assert_eq!(
+      page_count(&forced),
+      2,
+      "a forced break at the top of page 2 opened an empty page ({list} {first} {second})"
+    );
+  }
+  assert_eq!(
+    render_with(&document(235, "gap: 16px;", "", "break-before: page;")),
+    plain,
+    "a forced break at the top of page 2 changed the document"
+  );
+}
+
+#[test]
+fn forced_breaks_beside_spacing_alone_open_no_page() {
+  let fonts = fonts();
+  let render_with = |source: &str| render(a4_options(source, &fonts)).expect("render the doc");
+  let leading = render_with(
+    r#"<div style="display: flex; flex-direction: column;">
+      <div style="display: flex; margin-top: 16px; break-before: page;">One</div>
+    </div>"#,
+  );
+  let trailing = render_with(
+    r#"<div style="display: flex; flex-direction: column; padding-bottom: 16px;">
+      <div style="display: flex; break-after: page;">One</div>
+    </div>"#,
+  );
+  let doubled = render_with(
+    r#"<div style="display: flex; flex-direction: column;">
+      <div style="display: flex; break-after: page;">One</div>
+      <div style="display: flex; margin-top: 16px; break-before: page;">Two</div>
+    </div>"#,
+  );
+
+  assert_eq!(
+    page_count(&leading),
+    1,
+    "a leading break opened an empty page"
+  );
+  assert_eq!(
+    page_count(&trailing),
+    1,
+    "a trailing break opened an empty page"
+  );
+  assert_eq!(
+    page_count(&doubled),
+    2,
+    "adjacent breaks opened an empty page"
+  );
+}
+
+#[test]
+fn trailing_spacing_opens_no_page() {
+  let fonts = fonts();
+  let page = PageOptions {
+    width: 400.0,
+    height: 300.0,
+    margin: PageMargins::uniform(20.0),
+  };
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<div style="display: flex; flex-direction: column; padding-bottom: 40px;">
+            <div style="height: 240px;"><span style="font-size: 10px;">A</span></div>
+          </div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the doc"),
+      )
+      .page(page)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(page_count(&pdf), 1, "trailing padding opened an empty page");
+}
+
+/// A table of contents whose entries carry `targetPageNumber` hooks. Each
+/// section is forced onto its own page, so the entries have to read 2, 3 and 4.
+fn toc_document(cells: [&str; 3]) -> String {
+  let entry = |id: &str, title: &str, cell: &str| {
+    format!(
+      r##"<a href="#{id}" style="display: flex; column-gap: 4px;"><span>{title}</span>{cell}</a>"##
+    )
+  };
+  let section = |id: &str, title: &str| {
+    format!(
+      r##"<div id="{id}" style="display: flex; flex-direction: column; break-before: page; font-size: 18px;">{title}</div>"##
+    )
+  };
+
+  format!(
+    r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
+      <div style="display: flex; flex-direction: column;">{}{}{}</div>
+      {}{}{}
+    </div>"##,
+    entry("alpha", "Alpha", cells[0]),
+    entry("beta", "Beta", cells[1]),
+    entry("gamma", "Gamma", cells[2]),
+    section("alpha", "Alpha"),
+    section("beta", "Beta"),
+    section("gamma", "Gamma"),
+  )
+}
+
+fn toc_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+  PdfOptions::builder()
+    .node(from_html(source, FromHtmlOptions::default()).expect("parse toc fixture"))
+    .page(PageOptions {
+      width: 320.0,
+      height: 240.0,
+      margin: PageMargins::uniform(24.0),
+    })
+    .fonts(fonts)
+    .build()
+}
+
+#[test]
+fn paged_target_counters() {
+  let hooked = toc_document([
+    r#"<span class="targetPageNumber"></span>"#,
+    r#"<span class="targetPageNumber"></span>"#,
+    r#"<span class="targetPageNumber upper-roman"></span>"#,
+  ]);
+  let pdf = run_pdf_fixture("paged-target-counters", |fonts| toc_options(&hooked, fonts));
+  // Numbering the entries by hand has to render the same document, which pins
+  // the resolved pages to 2, 3 and 4 without decoding a subset font.
+  let numbered = toc_document(["<span>2</span>", "<span>3</span>", "<span>IV</span>"]);
+  let expected = render_pinned(toc_options(&numbered, &fonts()));
+
+  assert_eq!(
+    pdf, expected,
+    "target counters did not resolve to 2, 3 and 4"
+  );
+}
+
+/// Entries whose title all but fills the row, so a number wraps each of them
+/// onto a second line. Filling the counters therefore doubles the contents
+/// page, which pushes every section one page further along and renumbers the
+/// counters that caused it.
+fn wrapping_toc_document(cells: [&str; 8]) -> String {
+  let entry = |index: usize, cell: &str| {
+    format!(
+      r##"<a href="#s{index}" style="display: flex; flex-wrap: wrap; width: 100%;"><span style="width: 268px;">Section {index}</span>{cell}</a>"##
+    )
+  };
+  let section = |index: usize| {
+    format!(
+      r##"<div id="s{index}" style="display: flex; break-before: page; font-size: 18px;">Section {index}</div>"##
+    )
+  };
+  let entries: String = cells
+    .iter()
+    .enumerate()
+    .map(|(index, cell)| entry(index + 1, cell))
+    .collect();
+  let sections: String = (1..=cells.len()).map(section).collect();
+
+  format!(
+    r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">{entries}{sections}</div>"##
+  )
+}
+
+#[test]
+fn target_counters_settle_after_they_move_their_own_page() {
+  let hooked = wrapping_toc_document([r#"<span class="targetPageNumber"></span>"#; 8]);
+  let pdf = render(toc_options(&hooked, &fonts())).expect("render wrapping toc");
+  // The first pass numbers a contents page one line per entry, which puts the
+  // sections on pages 2 to 9. Those numbers wrap the entries, and the second
+  // pass has to renumber them from the taller contents page.
+  let numbered = wrapping_toc_document([
+    "<span>3</span>",
+    "<span>4</span>",
+    "<span>5</span>",
+    "<span>6</span>",
+    "<span>7</span>",
+    "<span>8</span>",
+    "<span>9</span>",
+    "<span>10</span>",
+  ]);
+  let expected = render(toc_options(&numbered, &fonts())).expect("render numbered wrapping toc");
+
+  assert_eq!(pdf, expected, "target counters did not settle after rewrap");
+}
+
+fn a4_options<'f>(source: &str, fonts: &'f Fonts) -> PdfOptions<'f> {
+  PdfOptions::builder()
+    .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+    .page(PageOptions::A4)
+    .fonts(fonts)
+    .build()
+}
+
+/// Text wraps at paint against the width layout measured it at, so a column
+/// with a fractional width paints exactly the lines the layout reserved.
+#[test]
+fn a_fractional_column_paints_the_lines_layout_reserved() {
+  let fonts = fonts();
+  let source = r#"<div style="display: flex; flex-direction: column; width: 217.25px;"><span style="font-size: 11px; line-height: 1.5;">Ihre Begleitung für diesen Tag ist Zahraa, die Ihnen ihre Heimatstadt aus ihrer ganz persönlichen Perspektive zeigen wird. Freuen Sie sich auf ein authentisches Oman-Erlebnis jenseits der typischen Reiseführer.</span></div>"#;
+  let node = from_html(source, FromHtmlOptions::default()).expect("parse the doc");
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node.clone())
+      .viewport(Viewport::new((800, None)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure the doc");
+  let reserved = (size.height / 16.5).round() as usize;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(node)
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+  let mut baselines: Vec<String> = content_lines(&pdf)
+    .map(|line| String::from_utf8_lossy(&line).into_owned())
+    .filter(|line| line.starts_with("BT ") && line.contains(" Tm"))
+    .filter_map(|line| line.split_whitespace().nth(10).map(str::to_owned))
+    .collect();
+
+  baselines.sort();
+  baselines.dedup();
+  assert_eq!(reserved, 5, "the layout reserves five lines");
+  assert_eq!(
+    baselines.len(),
+    reserved,
+    "the page painted a different number of lines than the layout reserved"
+  );
+}
+
+/// An inline hook has no box of its own. Directly under a tall block it would
+/// take that block's first page, so it takes the page the flow reached instead.
+#[test]
+fn an_inline_page_counter_follows_the_flow_that_precedes_it() {
+  let document = |page: &str| {
+    format!(
+      r#"<main>
+        <div style="height: 1100px;"></div>
+        <span style="font-size: 12px;">{page}</span>
+      </main>"#
+    )
+  };
+  // A box that paints elsewhere still leaves its flow behind, so a transform on
+  // the block above the hook must not move the page the hook names.
+  let transformed = |page: &str| {
+    format!(
+      r#"<main>
+        <div style="height: 1100px; transform: translateY(-1100px);"></div>
+        <span style="font-size: 12px;">{page}</span>
+      </main>"#
+    )
+  };
+  let hooked = document(r#"<span class="pageNumber"></span>"#);
+  let pdf = render(a4_options(&hooked, &fonts())).expect("render the hooked document");
+  let numbered = document("2");
+  let expected = render(a4_options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "an inline counter under a tall block did not name the page its line sits on"
+  );
+
+  let hooked = transformed(r#"<span class="pageNumber"></span>"#);
+  let pdf = render(a4_options(&hooked, &fonts())).expect("render the transformed document");
+  let expected = render(a4_options(&transformed("2"), &fonts()))
+    .expect("render the numbered transformed document");
+
+  assert_eq!(
+    pdf, expected,
+    "a transformed block moved the page the counter after it names"
+  );
+}
+
+/// A page counter that wraps its own line pushes the target one page along, so
+/// the target counter has to be numbered from the layout the page counter left
+/// behind, not the one before it.
+#[test]
+fn a_page_counter_renumbers_the_target_it_moves() {
+  let document = |page: &str, target: &str| {
+    format!(
+      r##"<div style="display: flex; flex-direction: column; width: 100%; font-size: 14px; color: #141414;">
+        <a href="#target" style="display: flex; column-gap: 4px;">see{target}</a>
+        <div style="display: flex; flex-wrap: wrap; width: 100%;"><span style="width: 268px;">Body</span>{page}</div>
+        <div style="height: 136px;"></div>
+        <div id="target" style="display: flex;">Target</div>
+      </div>"##
+    )
+  };
+  let hooked = document(
+    r#"<span class="pageNumber"></span>"#,
+    r#"<span class="targetPageNumber"></span>"#,
+  );
+  let pdf = render(toc_options(&hooked, &fonts())).expect("render the hooked document");
+  let numbered = document("<span>1</span>", "<span>2</span>");
+  let expected = render(toc_options(&numbered, &fonts())).expect("render the numbered document");
+
+  assert_eq!(
+    pdf, expected,
+    "the target counter did not follow the page the page counter moved it to"
+  );
+}
+
+#[test]
+fn target_counter_in_a_band_drops_its_placeholder() {
+  let band = |cell: &str| {
+    format!(
+      r##"<div style="display: flex; column-gap: 3px; font-size: 12px; color: #141414;">Page <span class="pageNumber"></span>, section {cell}</div>"##
+    )
+  };
+  let body = toc_document(["", "", ""]);
+  let banded = |footer: String, fonts: &Fonts| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(&body, FromHtmlOptions::default()).expect("parse toc"))
+        .page(PageOptions {
+          width: 320.0,
+          height: 240.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .footer(from_html(&footer, FromHtmlOptions::default()).expect("parse band"))
+        .fonts(fonts)
+        .build(),
+    )
+  };
+  let fonts = fonts();
+  let hooked = banded(
+    band(r##"<a href="#alpha"><span class="targetPageNumber">99</span></a>"##),
+    &fonts,
+  )
+  .expect("render band with a target hook");
+  let empty = banded(band(r##"<a href="#alpha"><span></span></a>"##), &fonts)
+    .expect("render band without one");
+
+  assert_eq!(hooked, empty, "a band hook kept its placeholder");
+}
+
+#[test]
+fn target_counter_without_a_target_renders_empty() {
+  let dangling = toc_document([r#"<span class="targetPageNumber"></span>"#; 3])
+    .replace("#alpha", "#missing")
+    .replace("#beta", "#missing-too");
+  let pdf = render(toc_options(&dangling, &fonts())).expect("render dangling toc");
+  let blank = toc_document(["<span></span>", "<span></span>", "<span>4</span>"])
+    .replace("#alpha", "#missing")
+    .replace("#beta", "#missing-too");
+  let expected = render(toc_options(&blank, &fonts())).expect("render blank toc");
+
+  assert_eq!(
+    pdf, expected,
+    "a fragment naming no element must render empty"
+  );
+}
+
+fn checker_pixels() -> Vec<u8> {
+  let mut pixels = Vec::with_capacity(8 * 8 * 4);
+
+  for row in 0..8u32 {
+    for col in 0..8u32 {
+      let on = (row / 2 + col / 2) % 2 == 0;
+
+      pixels.extend_from_slice(if on {
+        &[220, 60, 60, 255]
+      } else {
+        &[60, 60, 220, 255]
+      });
+    }
+  }
+  pixels
+}
+
+/// One image per `object-fit` value in a non-square box, so every sizing
+/// branch (stretch, letterbox, crop, shrink cap, intrinsic) is on the page.
+#[test]
+fn image_object_fit() {
+  run_pdf_fixture("image-object-fit", |fonts| {
+    let fits = [
+      ObjectFit::Fill,
+      ObjectFit::Contain,
+      ObjectFit::Cover,
+      ObjectFit::ScaleDown,
+      ObjectFit::None,
+    ];
+    let images: Vec<Node> = fits
+      .iter()
+      .map(|fit| {
+        Node::image(ImageData {
+          src: ImageSourceInput::Rgba(
+            RgbaImage::new(checker_pixels(), 8, 8, false).expect("rgba image"),
+          ),
+          width: Some(72.0),
+          height: Some(48.0),
+        })
+        .with_style(
+          Style::default()
+            .with(StyleDeclaration::object_fit(*fit))
+            .with(StyleDeclaration::margin_left(Px(12.0))),
+        )
+      })
+      .collect();
+
+    PdfOptions::builder()
+      .node(
+        Node::container(images).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::width(Percentage(100.0)))
+            .with(StyleDeclaration::height(Percentage(100.0)))
+            .with(StyleDeclaration::padding_top(Px(16.0))),
+        ),
+      )
+      .viewport(Viewport::new((460, 90)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// An SVG logo (gradient circle + stroked check) embeds as vector paths and
+/// shading patterns, never as a rasterized image XObject.
+#[test]
+fn svg_vector_image() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient></defs>
+  <circle cx="12" cy="12" r="10" fill="url(#g)"/>
+  <path d="M6 12 L11 17 L18 7" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>"##;
+  let pdf = run_pdf_fixture("svg-vector-image", |fonts| {
+    let logo = Node::image(ImageData {
+      src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+      width: Some(22.0),
+      height: Some(22.0),
+    });
+
+    PdfOptions::builder()
+      .node(
+        Node::container(vec![logo]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::padding_top(Px(8.0))),
+        ),
+      )
+      .viewport(Viewport::new((120, 60)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    !text.contains("/Subtype/Image"),
+    "svg image fell back to raster"
+  );
+  assert!(text.contains("/Shading"), "gradient lost its shading");
+}
+
+/// Repeat-spread gradients with singular `gradientTransform`s (zero and
+/// rank-1) render instead of panicking on the non-invertible transform.
+#[test]
+fn svg_singular_gradient_transform() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="8" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="scale(0)" spreadMethod="repeat">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient>
+  <linearGradient id="h" x1="0" y1="0" x2="8" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1 1 0 0 0 0)" spreadMethod="repeat">
+    <stop offset="0" stop-color="#ff0044"/><stop offset="1" stop-color="#0044ff"/>
+  </linearGradient></defs>
+  <rect width="24" height="12" fill="url(#g)"/>
+  <rect y="12" width="24" height="12" fill="url(#h)"/>
+</svg>"##;
+  run_pdf_fixture("svg-singular-gradient-transform", |fonts| {
+    let image = Node::image(ImageData {
+      src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+      width: Some(22.0),
+      height: Some(22.0),
+    });
+
+    PdfOptions::builder()
+      .node(Node::container(vec![image]))
+      .viewport(Viewport::new((60, 60)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Filters rasterize, luminance masks become soft masks, and pattern fills
+/// become tiling patterns.
+#[test]
+fn svg_fallback_and_masks() {
+  let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
+  <defs>
+    <filter id="b"><feGaussianBlur stdDeviation="1"/></filter>
+    <mask id="m" maskUnits="userSpaceOnUse" x="16" y="0" width="16" height="24">
+      <rect x="16" y="0" width="16" height="24" fill="#888"/>
+    </mask>
+    <pattern id="p" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="2" height="2" fill="#e33"/>
+    </pattern>
+  </defs>
+  <circle cx="8" cy="12" r="6" fill="#3a3" filter="url(#b)"/>
+  <rect x="18" y="4" width="12" height="16" fill="#33a" mask="url(#m)"/>
+  <rect x="34" y="4" width="12" height="16" fill="url(#p)"/>
+</svg>"##;
+  let pdf = run_pdf_fixture("svg-fallback-and-masks", |fonts| {
+    let image = Node::image(ImageData {
+      src: ImageSourceInput::Buffer(svg.as_bytes().to_vec()),
+      width: Some(48.0),
+      height: Some(24.0),
+    });
+
+    PdfOptions::builder()
+      .node(
+        Node::container(vec![image]).with_style(
+          Style::default()
+            .with(StyleDeclaration::display(Display::Flex))
+            .with(StyleDeclaration::padding_top(Px(8.0))),
+        ),
+      )
+      .viewport(Viewport::new((120, 60)))
+      .fonts(fonts)
+      .build()
+  });
+  let text = String::from_utf8_lossy(&pdf);
+
+  assert!(
+    text.contains("/Subtype/Image"),
+    "filtered subtree should rasterize"
+  );
+  assert!(text.contains("/SMask"), "mask lost its soft mask");
+  assert!(
+    text.contains("/PatternType 1"),
+    "pattern fill lost its tiling pattern"
+  );
+}
+
+#[test]
+fn box_chrome() {
+  run_pdf_fixture("box-chrome", |fonts| {
+    let source = r##"<div style="display: flex; width: 100%; height: 100%; padding: 24px; background-color: #ebf0fa;">
+      <div style="display: flex; width: 300px; height: 120px; padding: 16px; background-color: #ffffff; border: 3px solid #b42828; border-radius: 16px; opacity: 0.8; font-size: 20px; color: #14143c;">Chrome card</div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse chrome fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((400, 200)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+#[test]
+fn gradients() {
+  run_pdf_fixture("gradients", |fonts| {
+    let source = r##"<div style="display: flex; width: 100%; height: 100%; padding: 20px; column-gap: 20px; background-color: #ffffff;">
+      <div style="width: 110px; height: 110px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71);"></div>
+      <div style="width: 110px; height: 110px; background-image: radial-gradient(circle, #fddb92, #4481eb);"></div>
+      <div style="width: 110px; height: 110px; background-image: conic-gradient(from 0deg, red, yellow, lime, cyan, blue, magenta, red);"></div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse gradients fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((440, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// `mask-image` fades an element out through a soft mask rather than a
+/// rasterized copy of it.
+#[test]
+fn mask_image() {
+  let pdf = run_pdf_fixture("mask-image", |fonts| {
+    let source = r##"<div style="display: flex; width: 100%; height: 100%; padding: 12px; column-gap: 12px; background-color: #ffffff;">
+      <div style="width: 120px; height: 80px; background-color: #1d4ed8; mask-image: linear-gradient(to right, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
+      <div style="width: 120px; height: 80px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); mask-image: radial-gradient(circle, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
+      <div style="width: 120px; height: 80px; background-color: #047857; mask-image: radial-gradient(circle, rgba(0,0,0,1), rgba(0,0,0,0)); mask-size: 30px 20px; mask-repeat: repeat;"></div>
+      <div style="width: 120px; height: 80px; background-color: #b91c1c; filter: opacity(0.5); mask-image: linear-gradient(to bottom, rgba(0,0,0,1), rgba(0,0,0,0));"></div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse mask fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((550, 110)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("/SMask"),
+    "expected a soft mask in the graphics state"
+  );
+  assert_eq!(
+    haystack.matches("/S/Alpha").count(),
+    4,
+    "expected one alpha mask per element"
+  );
+  // The filtered cell's opacity lands once: on its content, not also on the
+  // mask that covers it, which would compound to a quarter.
+  assert_eq!(
+    haystack.matches("/ca 0.5").count(),
+    1,
+    "expected the element filter to set half opacity exactly once"
+  );
+  // The tiled mask resolves through the same placement as a background layer.
+  assert!(
+    haystack.contains("/XStep 30/YStep 20"),
+    "expected the mask layer to tile at its mask-size"
+  );
+}
+
+/// The color half of `filter`: each cell paints the same red, transformed by a
+/// different filter, so the fills carry different colors.
+#[test]
+fn color_filters() {
+  let pdf = run_pdf_fixture("color-filters", |fonts| {
+    let cell = |filter: &str| {
+      format!(
+        r##"<div style="width: 70px; height: 70px; background-color: #e11d48; filter: {filter};"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 10px; column-gap: 10px; background-color: #ffffff;">
+        {}{}{}{}{}{}{}
+      </div>"##,
+      cell("none"),
+      cell("grayscale(1)"),
+      cell("sepia(1)"),
+      cell("invert(1)"),
+      cell("hue-rotate(180deg)"),
+      cell("hue-rotate(90deg)"),
+      // A filter covers the whole rendered element, shadows included.
+      r##"<div style="width: 70px; height: 70px; background-color: #ffffff; box-shadow: 4px 4px 0 0 #e11d48; filter: grayscale(1);"></div>"##,
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse filter fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((520, 100)))
+      .fonts(fonts)
+      .build()
+  });
+  let fills = fill_colors(&pdf);
+  // A fill line ends with the three color components before the `rg` operator.
+  let rounded = |color: &str| {
+    let components: Vec<&str> = color.split_whitespace().rev().take(3).collect();
+
+    components
+      .into_iter()
+      .rev()
+      .map(|part| (part.parse::<f32>().unwrap_or_default() * 255.0).round() as u8)
+      .collect::<Vec<_>>()
+  };
+  let colors: Vec<Vec<u8>> = fills.iter().map(|color| rounded(color)).collect();
+
+  // The page background, then one fill per cell.
+  assert_eq!(
+    colors.len(),
+    9,
+    "expected one fill per cell, got {colors:?}"
+  );
+  assert_eq!(colors[1], vec![225, 29, 72], "unfiltered #e11d48");
+  // Rec. 709 luma of the source color.
+  assert_eq!(colors[2], vec![74, 74, 74], "grayscale(1)");
+  assert_eq!(
+    colors[4],
+    vec![30, 226, 183],
+    "invert(1) is 255 minus source"
+  );
+  assert_ne!(
+    colors[6], colors[5],
+    "hue-rotate(90deg) differs from 180deg"
+  );
+  assert_ne!(colors[6], colors[1], "hue-rotate(90deg) changes the color");
+  // The shadow of the last cell is grayscaled like the rest of the element.
+  assert_eq!(colors[7], vec![74, 74, 74], "shadow follows the filter");
+}
+
+/// Collects the `rg` fill colors from the deflated page content streams.
+fn fill_colors(pdf: &[u8]) -> Vec<String> {
+  let mut colors = Vec::new();
+  let mut rest = pdf;
+
+  while let Some(start) = find(rest, b"stream\n") {
+    let body = &rest[start + 7..];
+    let Some(end) = find(body, b"endstream") else {
+      break;
+    };
+    let mut decoded = Vec::new();
+
+    if ZlibDecoder::new(&body[..end])
+      .read_to_end(&mut decoded)
+      .is_ok()
+    {
+      let text = String::from_utf8_lossy(&decoded).into_owned();
+
+      colors.extend(
+        text
+          .lines()
+          .filter_map(|line| line.split_once(" rg").map(|(color, _)| color.to_string())),
+      );
+    }
+    rest = &body[end..];
+  }
+  colors
+}
+
+/// A gradient is built in pixels, and the shading pattern that carries it is
+/// placed against the page, so its matrix has to convert the two.
+#[test]
+fn a_gradient_axis_is_measured_in_page_units() {
+  let doc = r##"<div style="width: 300px; height: 120px; background-image: linear-gradient(to right, #ff5f6d, #3a1c71);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((300, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (shading, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  let coords = shading_coords(&pdf, shading).expect("shading coords");
+  let [x1, y1, x2, y2] = coords[..4] else {
+    panic!("expected four coords, got {coords:?}");
+  };
+  let (dx, dy) = (x2 - x1, y2 - y1);
+  let axis = (matrix[0] * dx + matrix[2] * dy).hypot(matrix[1] * dx + matrix[3] * dy);
+
+  // The box is 300 css px wide, which is 225 pt.
+  assert!(
+    (axis - 225.0).abs() < 0.5,
+    "gradient axis is {axis} pt, expected 225"
+  );
+}
+
+/// A radial gradient's circle keeps the centre and the reach its box gives it
+/// once the pattern matrix has taken both into page units.
+#[test]
+fn a_radial_gradient_is_centred_in_page_units() {
+  let doc = r##"<div style="width: 120px; height: 120px; background-image: radial-gradient(circle, #fddb92, #4481eb);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((120, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (shading, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  let coords = shading_coords(&pdf, shading).expect("shading coords");
+  // A radial shading carries two circles: `[x0 y0 r0 x1 y1 r1]`.
+  let [_, _, _, cx, cy, radius] = coords[..6] else {
+    panic!("expected six coords, got {coords:?}");
+  };
+  let centre_x = matrix[0] * cx + matrix[2] * cy + matrix[4];
+  let centre_y = matrix[1] * cx + matrix[3] * cy + matrix[5];
+  let reach = radius * matrix[0].hypot(matrix[1]);
+
+  // The box fills a 120 css px square, which is 90 pt, so its centre is 45 pt
+  // in on both axes and the farthest corner is 60 css px away diagonally.
+  assert!(
+    (centre_x - 45.0).abs() < 0.5 && (centre_y - 45.0).abs() < 0.5,
+    "gradient centre is ({centre_x}, {centre_y}) pt, expected (45, 45)"
+  );
+  let farthest_corner = 45.0 * 2.0_f32.sqrt();
+  assert!(
+    (reach - farthest_corner).abs() < 0.5,
+    "gradient reaches {reach} pt, expected {farthest_corner}"
+  );
+}
+
+/// A conic gradient has no coords to read, so its matrix carries the whole
+/// placement and has to be in page units like the others.
+#[test]
+fn a_conic_gradient_is_placed_in_page_units() {
+  let doc = r##"<div style="width: 120px; height: 120px; background-image: conic-gradient(from 0deg, red, lime, blue, red);"></div>"##;
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse gradient doc"))
+      .viewport(Viewport::new((120, 120)))
+      .fonts(&fonts())
+      .build(),
+  );
+
+  let (_, matrix) = shading_pattern(&pdf).expect("a shading pattern");
+  // The matrix rotates, so the scale is the length of a basis vector.
+  let scale = matrix[0].hypot(matrix[1]);
+
+  assert!(
+    (scale - 0.75).abs() < 0.01,
+    "conic pattern scales by {scale}, expected 0.75 pt per css px"
+  );
+}
+
+/// `box-shadow`: a sharp shadow is one exact ring, a blurred one is a stack of
+/// bands, and an inset shadow fills the box minus the hole it casts.
+#[test]
+fn box_shadows() {
+  let pdf = run_pdf_fixture("box-shadows", |fonts| {
+    let cell = |shadow: &str| {
+      format!(
+        r##"<div style="width: 90px; height: 90px; margin: 20px; border-radius: 12px; background-color: #ffffff; box-shadow: {shadow};"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 8px; background-color: #f4f4f5;">
+        {}{}{}{}
+      </div>"##,
+      cell("6px 6px 0 0 #111827"),
+      cell("0 8px 16px rgba(17, 24, 39, 0.45)"),
+      cell("inset 0 0 0 8px #111827"),
+      // A transparent border must not carry inset shadow paint: CSS draws inset
+      // shadows inside the padding box.
+      cell("inset 0 0 0 6px rgba(17, 24, 39, 0.4); border: 10px solid transparent"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse box shadow fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((450, 150)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  // The blurred cell needs partial opacity, and so does the translucent inset
+  // one: a band's opacity multiplies the color's alpha rather than replacing it.
+  assert!(
+    haystack.contains("/ca "),
+    "expected a shadow to set fill opacity"
+  );
+}
+
+/// `clip-path` basic shapes clip the element and its decorations: an inset with
+/// a radius, an ellipse, a polygon, and a `path()`.
+#[test]
+fn clip_path_shapes() {
+  let pdf = run_pdf_fixture("clip-path-shapes", |fonts| {
+    let cell = |clip: &str| {
+      format!(
+        r##"<div style="width: 110px; height: 110px; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); border: 4px solid #111827; clip-path: {clip};"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 16px; background-color: #ffffff;">
+        {}{}{}{}{}{}
+      </div>"##,
+      cell("inset(10px 12px round 16px)"),
+      cell("ellipse(45px 30px at 55px 55px)"),
+      cell("polygon(50% 0%, 100% 100%, 0% 100%)"),
+      cell("path('M 10 10 H 100 V 100 H 10 Z')"),
+      // A shape with no area hides the element instead of leaving it visible.
+      cell("inset(50% 0)"),
+      // An even-odd rule leaves the inner ring of a self-overlapping polygon
+      // unpainted, and the shape's own rule wins over `clip-rule`.
+      cell(
+        "polygon(evenodd, 55px 5px, 105px 105px, 5px 105px, 105px 40px, 5px 40px); clip-rule: nonzero",
+      ),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse clip path fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((800, 150)))
+      .fonts(fonts)
+      .build()
+  });
+
+  // Five non-zero shape clips (the sixth is even-odd), plus the rounded-box
+  // clip each gradient layer pushes.
+  assert_eq!(
+    clip_operators(&pdf),
+    11,
+    "expected one clip per shape, before its decorations"
+  );
+  assert_eq!(
+    even_odd_clip_operators(&pdf),
+    1,
+    "expected the even-odd shape to clip with W*"
+  );
+}
+
+/// Counts even-odd clip operators, which end their line with `W*`.
+fn even_odd_clip_operators(pdf: &[u8]) -> usize {
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b"W*"))
+    .count()
+}
+
+/// Counts non-zero clip operators across the page content streams.
+fn clip_operators(pdf: &[u8]) -> usize {
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b"W"))
+    .count()
+}
+
+/// Counts text-show operators across the page content streams.
+fn text_show_operators(pdf: &[u8]) -> usize {
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .count()
+}
+
+/// Every deflated content stream in the document, in file order.
+fn content_streams(pdf: &[u8]) -> Vec<Vec<u8>> {
+  let mut streams = Vec::new();
+  let mut rest = pdf;
+
+  while let Some(start) = find(rest, b"stream\n") {
+    let body = &rest[start + 7..];
+    let Some(end) = find(body, b"endstream") else {
+      break;
+    };
+    let mut decoded = Vec::new();
+
+    if ZlibDecoder::new(&body[..end])
+      .read_to_end(&mut decoded)
+      .is_ok()
+    {
+      streams.push(decoded);
+    }
+    rest = &body[end + "endstream".len()..];
+  }
+  streams
+}
+
+/// The lines of every deflated content stream in the document.
+fn content_lines(pdf: &[u8]) -> impl Iterator<Item = Vec<u8>> {
+  content_streams(pdf).into_iter().flat_map(|stream| {
+    stream
+      .split(|byte| *byte == b'\n')
+      .map(<[u8]>::to_vec)
+      .collect::<Vec<_>>()
+  })
+}
+
+/// The document's text with every deflated stream inflated, so a structure
+/// element reads the same whether or not it sits in an object stream.
+fn inflated_text(pdf: &[u8]) -> String {
+  let mut text = String::from_utf8_lossy(pdf).into_owned();
+
+  for line in content_lines(pdf) {
+    text.push('\n');
+    text.push_str(&String::from_utf8_lossy(&line));
+  }
+
+  text
+}
+
+/// Page-content lines ending in the Bezier-curve operator `c`.
+fn curve_operator_lines(pdf: &[u8]) -> usize {
+  content_lines(pdf)
+    .filter(|line| line.ends_with(b" c"))
+    .count()
+}
+
+/// Every `/DW` value in the document, as it was written.
+fn default_widths(pdf: &[u8]) -> Vec<String> {
+  let mut widths = Vec::new();
+  let mut rest = pdf;
+
+  while let Some(at) = find(rest, b"/DW ") {
+    rest = &rest[at + b"/DW ".len()..];
+    let end = rest
+      .iter()
+      .position(|byte| !byte.is_ascii_digit() && *byte != b'.' && *byte != b'-')
+      .unwrap_or(rest.len());
+    widths.push(String::from_utf8_lossy(&rest[..end]).into_owned());
+    rest = &rest[end..];
+  }
+
+  widths
+}
+
+/// Every glyph width written inside a `/W` array.
+fn exception_widths(pdf: &[u8]) -> Vec<f32> {
+  let mut widths = Vec::new();
+  let mut rest = pdf;
+
+  while let Some(at) = find(rest, b"/W[") {
+    rest = &rest[at + b"/W[".len()..];
+    let Some(end) = rest.iter().position(|byte| *byte == b']') else {
+      break;
+    };
+
+    // The writer emits plain `first last width` triples, so every third token is a width.
+    widths.extend(
+      String::from_utf8_lossy(&rest[..end])
+        .split_ascii_whitespace()
+        .skip(2)
+        .step_by(3)
+        .filter_map(|token| token.parse::<f32>().ok()),
+    );
+    rest = &rest[end..];
+  }
+
+  widths
+}
+
+/// The first shading pattern in the document: the shading it points at, and its matrix.
+fn shading_pattern(pdf: &[u8]) -> Option<(usize, [f32; 6])> {
+  let at = find(pdf, b"/PatternType 2/Shading ")?;
+  let rest = &pdf[at + b"/PatternType 2/Shading ".len()..];
+  let shading = read_numbers(rest, 1)?[0] as usize;
+  let matrix_at = find(rest, b"/Matrix[")?;
+  let matrix = read_numbers(&rest[matrix_at + b"/Matrix[".len()..], 6)?;
+
+  Some((shading, matrix.try_into().ok()?))
+}
+
+/// The `/Coords` of one shading object.
+fn shading_coords(pdf: &[u8], shading: usize) -> Option<Vec<f32>> {
+  let at = find(pdf, format!("\n{shading} 0 obj").as_bytes())?;
+  let coords_at = find(&pdf[at..], b"/Coords[")?;
+
+  read_numbers(&pdf[at + coords_at + b"/Coords[".len()..], 6)
+}
+
+fn read_numbers(bytes: &[u8], count: usize) -> Option<Vec<f32>> {
+  let text = String::from_utf8_lossy(&bytes[..bytes.len().min(256)]);
+  let numbers: Vec<f32> = text
+    .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+    .filter(|token| !token.is_empty())
+    .filter_map(|token| token.parse().ok())
+    .take(count)
+    .collect();
+
+  (numbers.len() == count).then_some(numbers)
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+  haystack
+    .windows(needle.len())
+    .position(|window| window == needle)
+}
+
+/// CSS `outline`: a ring outside the border box, offset outward, following the
+/// border radius, with no effect on layout.
+#[test]
+fn outlines() {
+  let pdf = run_pdf_fixture("outlines", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 90px; height: 90px; margin: 24px; background-color: #e0e7ff; border-radius: 10px; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 8px; background-color: #ffffff;">
+        {}{}{}
+      </div>"##,
+      cell("outline: 4px solid #4338ca;"),
+      cell("outline: 4px solid #4338ca; outline-offset: 6px;"),
+      // A negative offset pulls the ring inside the border box.
+      cell("outline: 3px dashed #b91c1c; outline-offset: -12px;"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse outline fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((420, 150)))
+      .fonts(fonts)
+      .build()
+  });
+  // A solid ring fills; a dashed one strokes its centerline so the dashes
+  // survive. Both carry their outline color into the deflated content streams.
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  for needle in [
+    &b"0.2627 0.2196 0.7922 rg"[..],
+    &b"0.7255 0.1098 0.1098 RG"[..],
+  ] {
+    assert!(
+      content.iter().any(|line| find(line, needle).is_some()),
+      "expected an outline color"
+    );
+  }
+}
+
+/// An inline box's `outline` follows its text across line breaks as one
+/// contour, at the box's opacity.
+#[test]
+fn inline_outlines() {
+  let pdf = run_pdf_fixture("inline-outlines", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; font-size: 20px; line-height: 1.6; color: #111827;">
+      Plain words, then <span style="outline: 2px solid #0e7490; outline-offset: 2px;">an outlined phrase that wraps onto the next line</span> and <span style="outline: 3px dashed #be123c; opacity: 0.5;">a faded one</span>.
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse inline outline fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  assert!(
+    content
+      .iter()
+      .any(|line| find(line, b"0.0549 0.4549 0.5647 rg").is_some()),
+    "expected the inline outline's color"
+  );
+}
+
+/// Spans that set their own size paint inside a block whose `font-size` is 0, and so does text
+/// that overflows a box or an inline block with no height.
+#[test]
+fn inline_zero_sized_parents() {
+  let pdf = run_pdf_fixture("inline-zero-sized-parents", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; color: #111827;">
+      <div style="font-size: 0;"><span style="font-size: 24px;">Sized</span> <span style="font-size: 24px; color: #be123c;">spans</span></div>
+      <div style="height: 0; font-size: 20px;">Overflowing text</div>
+      <div style="font-size: 20px; margin-top: 32px;">Before <span style="display: inline-block; height: 0;">inside</span> after</div>
+    </div>"##;
+    let node =
+      from_html(source, FromHtmlOptions::default()).expect("parse zero-sized parent fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 160)))
+      .fonts(fonts)
+      .build()
+  });
+  let shown = content_lines(&pdf)
+    .filter(|line| find(line, b"TJ").is_some() || find(line, b"Tj").is_some())
+    .count();
+
+  assert!(
+    shown >= 5,
+    "expected both spans, the overflowing text, and the inline block, got {shown} text runs"
+  );
+}
+
+/// Each `text-decoration-style` draws its own line, and `skip-ink` keeps a pattern's phase.
+#[test]
+fn text_decoration_styles() {
+  let pdf = run_pdf_fixture("text-decoration-styles", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 24px; background-color: #ffffff; font-size: 24px; color: #0f172a; display: flex; flex-direction: column; gap: 12px;">
+      <div style="text-decoration: underline double;">double</div>
+      <div style="text-decoration: underline dotted;">dotted</div>
+      <div style="text-decoration: underline dashed #16a34a 2px;">dashed</div>
+      <div style="text-decoration: underline wavy #e11d48;">Typing wavy</div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse decoration fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 240)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+
+  assert!(
+    content.iter().any(|line| find(line, b" d").is_some()),
+    "expected a dash pattern for the dotted and dashed lines"
+  );
+}
+
+/// `background-origin` moves the positioning area, `background-clip` shrinks
+/// the painted region, `border-area` paints over the borders, and
+/// `background-blend-mode` blends a layer into the one below.
+#[test]
+fn background_boxes() {
+  let pdf = run_pdf_fixture("background-boxes", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 100px; height: 100px; padding: 14px; border: 8px solid rgba(17, 24, 39, 0.35); background-color: #fef3c7; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); background-size: 40px 40px; background-repeat: no-repeat; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 10px; column-gap: 10px; background-color: #ffffff;">
+        {}{}{}{}{}
+      </div>"##,
+      cell("background-origin: border-box;"),
+      cell("background-origin: content-box;"),
+      cell("background-clip: content-box;"),
+      cell("background-clip: border-area;"),
+      cell("background-blend-mode: multiply;"),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse background boxes");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((600, 130)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("/Multiply"),
+    "expected the blended layer to set its blend mode"
+  );
+}
+
+/// A text shadow belongs to the page of the line it shadows. Shifted past the
+/// page cut, it used to be claimed by the next page and drawn off its top.
+#[test]
+fn text_shadow_stays_on_its_line_page() {
+  let doc = r#"<div style="font-size:16px;line-height:20px;">
+    <div style="height:225px"></div>
+    <div style="color:#00f;text-shadow:0 20px 0 #0f0;">shadowed</div>
+    <div style="color:#f00;">next page</div>
+  </div>"#;
+  let pdf = run_pdf_fixture("text-shadow-page-cut", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse shadow doc"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let streams = content_streams(&pdf);
+  let page_of = |fill: &[u8]| {
+    streams
+      .iter()
+      .position(|stream| find(stream, fill).is_some())
+      .unwrap_or_else(|| panic!("expected a {} fill", String::from_utf8_lossy(fill)))
+  };
+
+  assert_ne!(
+    page_of(b"0 0 1 rg"),
+    page_of(b"1 0 0 rg"),
+    "the fixture needs the red line on the next page"
+  );
+  assert_eq!(
+    page_of(b"0 1 0 rg"),
+    page_of(b"0 0 1 rg"),
+    "the shadow left the page of the line it shadows"
+  );
+}
+
+/// A blurred `text-shadow` fades the underline's shadow through the same bands as the glyphs'.
+#[test]
+fn text_decoration_shadow() {
+  run_pdf_fixture("text-decoration-shadow", |fonts| {
+    let source = r##"<div style="width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 32px; color: #111827; text-decoration: underline 3px; text-shadow: 4px 4px 6px rgba(37, 99, 235, 0.8);">Underlined</div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse decoration shadow"))
+      .viewport(Viewport::new((260, 90)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// `background-clip: border-area` keeps the background where a dashed, dotted or double border
+/// paints.
+#[test]
+fn background_clip_border_area_gaps() {
+  run_pdf_fixture("background-clip-border-area-gaps", |fonts| {
+    let source = r##"<div style="display: flex; gap: 24px; width: 100%; height: 100%; padding: 24px; background-color: #ffffff;">
+      <div style="width: 80px; height: 80px; border: 10px dashed transparent; background-clip: border-area; background-image: linear-gradient(135deg, #2563eb, #dc2626);"></div>
+      <div style="width: 80px; height: 80px; border: 10px dotted transparent; border-radius: 16px; background-clip: border-area; background-color: #16a34a;"></div>
+      <div style="width: 80px; height: 80px; border: 10px double transparent; background-clip: border-area; background-color: #ea580c;"></div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse border-area fixture"))
+      .viewport(Viewport::new((400, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A colour glyph's `text-shadow` is its silhouette in the shadow colour.
+#[test]
+fn color_glyph_text_shadow() {
+  let mut fonts = fonts();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/twemoji/TwemojiMozilla-colr.woff2"),
+  )
+  .expect("read emoji font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load emoji font");
+  run_pdf_fixture_with("color-glyph-text-shadow", &fonts, |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 12px; width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 40px; color: #111827;">
+      <div style="text-shadow: 6px 6px 0 #2563eb;">Party 🎉🚀</div>
+      <div style="text-shadow: 6px 6px 4px rgba(220, 38, 38, 0.8);">Blur 🎉🚀</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse colour glyph shadow"))
+      .viewport(Viewport::new((320, 150)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A bitmap glyph's `text-shadow`, sharp and blurred, is its alpha in the shadow colour.
+#[test]
+fn bitmap_glyph_text_shadow() {
+  let mut fonts = Fonts::default();
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/fonts/noto-sans/NotoColorEmoji.ttf"),
+  )
+  .expect("read bitmap emoji font");
+
+  fonts
+    .register(FontResource::new(data))
+    .expect("load bitmap emoji font");
+  run_pdf_fixture_with("bitmap-glyph-text-shadow", &fonts, |fonts| {
+    let source = r##"<div style="display: flex; column-gap: 24px; width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 48px; line-height: 1;">
+      <div style="text-shadow: 8px 8px 0 rgba(37, 99, 235, 0.6);">😀</div>
+      <div style="text-shadow: 8px 8px 8px rgba(220, 38, 38, 0.8);">😀</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse bitmap glyph shadow"))
+      .viewport(Viewport::new((180, 100)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// `text-shadow` draws shifted glyph passes under the text, and
+/// `-webkit-text-stroke` strokes the glyph outlines around the fill.
+#[test]
+fn text_shadow_and_stroke() {
+  let pdf = run_pdf_fixture("text-shadow-stroke", |fonts| {
+    let source = r##"<div style="display: flex; flex-direction: column; row-gap: 8px; width: 100%; height: 100%; padding: 16px; background-color: #ffffff; font-size: 28px; color: #111827;">
+      <div style="text-shadow: 3px 3px 0 #f59e0b;">Sharp shadow</div>
+      <div style="text-shadow: 2px 2px 4px rgba(17, 24, 39, 0.5);">Blurred shadow</div>
+      <div style="-webkit-text-stroke: 1px #b91c1c; color: #fef3c7;">Stroked text</div>
+      <div style="-webkit-text-stroke: 2px rgba(185, 28, 28, 0.25); color: #fef3c7;">Faded stroke</div>
+      <div>Plain <span style="-webkit-text-stroke: 1px #2563eb;">span stroke</span></div>
+      <div style="-webkit-text-stroke: 3px #b91c1c;">Same words</div>
+      <div style="-webkit-text-stroke: 9px #b91c1c;">Same words</div>
+      <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent;">Gradient text</div>
+      <div style="background-image: linear-gradient(90deg, #ff5f6d, #3a1c71); background-clip: text; color: transparent; -webkit-text-stroke: 6px transparent;">Ringed text</div>
+      <div style="background-image: url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%228%22 height=%228%22%3E%3Crect width=%228%22 height=%228%22 fill=%22%2316a34a%22/%3E%3C/svg%3E'); background-clip: text; color: transparent;">Image text</div>
+    </div>"##;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse text shadow fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 200)))
+      .fonts(fonts)
+      .build()
+  });
+  let content: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let contains = |needle: &[u8]| content.iter().any(|line| find(line, needle).is_some());
+
+  // The amber shadow pass fills before the text color does.
+  assert!(
+    contains(b"0.9608 0.6196 0.0431 rg"),
+    "expected the shadow color fill"
+  );
+  // The stroke sets a red stroke color (RG) next to the cream fill.
+  assert!(
+    contains(b"0.7255 0.1098 0.1098 RG"),
+    "expected the text stroke color"
+  );
+  // A span sets the stroke for itself, so the blue outline reaches the file
+  // even though the line it sits on carries none.
+  assert!(
+    contains(b"0.1451 0.3882 0.9216 RG"),
+    "expected the inline span stroke color"
+  );
+  // Two lines of the same words differ only in stroke width, so the shaping
+  // cache has to key on it.
+  assert!(
+    contains(b"3 w") && contains(b"9 w"),
+    "one stroke width served both lines"
+  );
+  // A transparent `-webkit-text-stroke` reveals a background-coloured ring, so
+  // the background pass widens the glyph coverage by the stroke width.
+  assert!(contains(b"6 w"), "expected the widened clip-text coverage");
+  // The clip-text lines fill their glyphs with the shading and the image, both
+  // of which reach the glyphs as a pattern rather than a colour.
+  assert!(
+    contains(b"/Pattern cs"),
+    "expected a gradient fill on the clip-text glyphs"
+  );
+  // An image layer has no paint of its own. Without a pattern carrying it, the
+  // layer is dropped and the transparent text comes out invisible, taking the
+  // embedded image with it.
+  assert!(
+    find(&pdf, b"/Subtype /Image").is_some() || find(&pdf, b"/Subtype/Image").is_some(),
+    "the image layer left the clip-text glyphs with nothing to fill them"
+  );
+  // A stroke colour keeps its alpha: the quarter-opaque outline reaches the
+  // file as a stroking alpha, not as a solid line. The value is the alpha byte
+  // over 255, so it lands a hair off the quarter it was written as.
+  assert!(
+    stroke_alphas(&inflated_text(&pdf))
+      .iter()
+      .any(|alpha| (alpha - 0.25).abs() < 0.01),
+    "translucent text stroke reached the file opaque"
+  );
+}
+
+/// `url()` layers: a bitmap background sized by its intrinsic dimensions,
+/// tiled, covered, and used as a `mask-image` alpha source.
+#[test]
+fn url_layers() {
+  let pdf = run_pdf_fixture("url-layers", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 96px; height: 96px; background-color: #f4f4f5; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 12px; column-gap: 12px; background-color: #ffffff;">
+        {}{}{}{}
+      </div>"##,
+      // background-size defaults to auto: the 8x8 checker's intrinsic size.
+      cell("background-image: url(checker); background-repeat: no-repeat;"),
+      cell("background-image: url(checker); background-size: 24px 24px;"),
+      cell("background-image: url(checker); background-size: cover;"),
+      cell(
+        "background-color: #1d4ed8; mask-image: url(checker); mask-size: 48px 48px; mask-repeat: repeat;"
+      ),
+    );
+    let node = from_html(&source, FromHtmlOptions::default()).expect("parse url layer fixture");
+    let buffer =
+      ImageBuffer::from_rgba_bytes(checker_pixels(), 8, 8).expect("checker image buffer");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((460, 120)))
+      .images(HashMap::from([(
+        "checker".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("/Subtype/Image"),
+    "expected image XObjects for the url() layers"
+  );
+  assert!(
+    haystack.contains("/XStep 48/YStep 48"),
+    "expected the tiled mask layer to repeat at its mask-size"
+  );
+}
+
+/// `background-size`, `-position` and the four `-repeat` styles: a sized tile
+/// placed once, tiled, spaced out, and rounded to fit whole tiles.
+#[test]
+fn background_placement() {
+  let pdf = run_pdf_fixture("background-placement", |fonts| {
+    let cell = |style: &str| {
+      format!(
+        r##"<div style="width: 120px; height: 120px; background-color: #f4f4f5; background-image: linear-gradient(135deg, #ff5f6d, #3a1c71); background-size: 50px 35px; {style}"></div>"##
+      )
+    };
+    let source = format!(
+      r##"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 16px; background-color: #ffffff;">
+        {}{}{}{}{}
+      </div>"##,
+      cell("background-repeat: no-repeat; background-position: right bottom;"),
+      // A tile as wide as the box still tiles: the phase pulls a second one in.
+      cell("background-repeat: repeat; background-size: 120px 120px; background-position: 20px 0;"),
+      cell("background-repeat: repeat;"),
+      cell("background-repeat: space;"),
+      // The position still applies to the rescaled tile, shifting its phase.
+      cell("background-repeat: round; background-position: center;"),
+    );
+    let node =
+      from_html(&source, FromHtmlOptions::default()).expect("parse background placement fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((720, 160)))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  // Three of the four cells tile, and a tiling pattern is one shading reused
+  // by a pattern object rather than one shading per tile. In a 120px box a
+  // 50x35 tile repeats at its own size, spaces out to 70x42.5, and rounds to
+  // two by three whole tiles.
+  for needle in [
+    "/XStep 50/YStep 35",
+    "/XStep 70/YStep 42.5",
+    "/XStep 60/YStep 40",
+  ] {
+    assert!(haystack.contains(needle), "missing pattern step {needle}");
+  }
+  assert_eq!(
+    haystack.matches("/PatternType 1").count(),
+    4,
+    "expected one tiling pattern per repeating cell"
+  );
+}
+
+/// `box-decoration-break: clone` on a fragmented container: every page
+/// fragment paints full borders and radius; the avoided child moves whole.
+#[test]
+fn paged_clone_decorations() {
+  run_pdf_fixture("paged-clone-decorations", |fonts| {
+    let rows: String = (1..=24)
+      .map(|i| {
+        format!(
+          r#"<div style="font-size: 13px; color: #1c1917;">Clause {i} of the agreement</div>"#
+        )
+      })
+      .collect();
+    let source = format!(
+      r#"<div style="display: flex; flex-direction: column; width: 100%; padding: 14px; row-gap: 4px; border: 3px solid #1c1917; border-radius: 14px; box-decoration-break: clone; background-color: #fafaf9;">
+        {rows}
+        <div style="display: flex; flex-direction: column; row-gap: 4px; padding: 10px; background-color: #e7e5e4; break-inside: avoid;">
+          <div style="font-size: 13px;">Kept-together block line one</div>
+          <div style="font-size: 13px;">Kept-together block line two</div>
+          <div style="font-size: 13px;">Kept-together block line three</div>
+        </div>
+      </div>"#
+    );
+
+    PdfOptions::builder()
+      .node(from_html(&source, FromHtmlOptions::default()).expect("parse clone fixture"))
+      .page(PageOptions {
+        width: 360.0,
+        height: 260.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Transformed subtrees become unsplittable atoms: the rotated card near a cut
+/// moves whole to the next page; the skewed divider stays intact.
+#[test]
+fn paged_transform_atoms() {
+  run_pdf_fixture("paged-transforms", |fonts| {
+    let source = r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 10px;">
+      <div style="height: 150px; background-color: #dbeafe;"></div>
+      <div style="width: 100%; height: 10px; transform: skewY(4deg); background-color: #111111;"></div>
+      <div style="width: 220px; height: 90px; transform: rotate(8deg); background-color: #fecaca; border: 2px solid #b91c1c;"></div>
+      <div style="height: 140px; background-color: #dcfce7;"></div>
+      <div style="width: 200px; height: 70px; transform: scale(1.2) translate(20px, 0px); background-color: #fde68a;"></div>
+      <div style="height: 150px; background-color: #f3e8ff;"></div>
+    </div>"#;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse transforms fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// A line taller than a page moves to the next page, as content precedes it, then runs on over the
+/// page after it, where its text and the lines after it follow.
+#[test]
+fn paged_monolithic_overflow() {
+  let pdf = run_pdf_fixture("paged-monolithic-overflow", |fonts| {
+    let source = r##"<div style="font-size: 16px; line-height: 24px; color: #141414">
+      <div>Line 1 before the tall line</div>
+      <div>Line 2 before the tall line</div>
+      <div>Line 3 before the tall line</div>
+      <div><span style="display: inline-block; width: 120px; height: 360px; background-image: linear-gradient(#2563eb, #db2777)"></span> tall line text</div>
+      <div>Line A after the tall line</div>
+      <div>Line B after the tall line</div>
+    </div>"##;
+
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse overflow fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  assert_eq!(
+    page_count(&pdf),
+    3,
+    "the tall line starts page 2 and runs on into page 3"
+  );
+}
+
+/// An inline-block taller than a page shows each line of its text on the one page that owns it, so
+/// the text layer holds it once, as it does when the whole block fits on one page.
+#[test]
+fn an_overflowing_inline_block_emits_its_text_once() {
+  let fonts = fonts();
+  let source = r##"<div style="font-size: 16px; line-height: 24px">
+    <div>Before</div>
+    <div><span style="display: inline-block; width: 200px; height: 360px">First inside<br>Second inside<br>Third inside</span> after</div>
+  </div>"##;
+  let text_shows = |height: f32| {
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse the doc"))
+        .page(PageOptions {
+          width: 400.0,
+          height,
+          margin: PageMargins::uniform(24.0),
+        })
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render the doc");
+
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"Tj") || line.ends_with(b"TJ"))
+      .count()
+  };
+
+  assert!(text_shows(1000.0) > 0);
+  assert_eq!(text_shows(300.0), text_shows(1000.0));
+}
+
+/// A glyph taller than a page is text on the page that owns its line, and outlines on the page it
+/// runs on over.
+#[test]
+fn a_glyph_taller_than_a_page_runs_on_as_outlines() {
+  let fonts = fonts();
+  let pdf = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          r#"<div style="font-size: 400px; line-height: 1">g</div>"#,
+          FromHtmlOptions::default(),
+        )
+        .expect("parse the doc"),
+      )
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert_eq!(page_count(&pdf), 2);
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"Tj") || line.ends_with(b"TJ"))
+      .count(),
+    1
+  );
+  assert!(curve_operator_lines(&pdf) > 0);
+}
+
+/// Header and footer bands together, counters in both, a forced break, and a
+/// keep-together block taller than the window (hard cut).
+#[test]
+fn paged_header_footer() {
+  run_pdf_fixture("paged-header-footer", |fonts| {
+    let tall_rows: String = (1..=30)
+      .map(|i| format!(r#"<div style="font-size: 12px;">Overflowing row {i}</div>"#))
+      .collect();
+    let source = format!(
+      r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 4px;">
+        <div style="font-size: 14px; break-after: page;">Section one ends here</div>
+        <div style="display: flex; flex-direction: column; row-gap: 4px; break-inside: avoid; background-color: #f5f5f4;">
+          {tall_rows}
+        </div>
+        <div style="font-size: 14px;">Trailing content</div>
+      </div>"#
+    );
+    let band = |label: &str| {
+      from_html(
+        &format!(
+          r#"<div style="display: flex; width: 100%; justify-content: space-between; font-size: 11px; color: #57534e; padding: 6px 0;">
+            <div>{label}</div>
+            <div style="display: flex; column-gap: 3px">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>
+          </div>"#
+        ),
+        FromHtmlOptions::default(),
+      )
+      .expect("parse band fixture")
+    };
+
+    PdfOptions::builder()
+      .node(from_html(&source, FromHtmlOptions::default()).expect("parse header-footer fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 320.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .header(band("Quarterly report"))
+      .footer(band("Confidential"))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Bands taller than the default margin, with every side left at `auto`. The
+/// page has to give them room, so the body starts below the header on every
+/// page rather than under it.
+#[test]
+fn auto_margin_bands() {
+  run_pdf_fixture("auto-margin-bands", |fonts| {
+    let rows: String = (1..=24)
+      .map(|i| format!(r#"<div style="font-size: 12px;">Row {i}</div>"#))
+      .collect();
+    let source = format!(
+      r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 4px;">{rows}</div>"#
+    );
+    let band = |label: &str, lines: usize| {
+      let body: String = (1..=lines)
+        .map(|line| format!(r#"<div style="font-size: 11px;">{label} line {line}</div>"#))
+        .collect();
+      from_html(
+        &format!(
+          r#"<div style="display: flex; flex-direction: column; width: 100%; row-gap: 2px; padding: 6px 12px; background-color: #f5f5f4;">
+            {body}
+            <div style="display: flex; column-gap: 3px; font-size: 11px;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>
+          </div>"#
+        ),
+        FromHtmlOptions::default(),
+      )
+      .expect("parse auto margin band")
+    };
+
+    PdfOptions::builder()
+      .node(from_html(&source, FromHtmlOptions::default()).expect("parse auto margin fixture"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 320.0,
+        ..PageOptions::A4
+      })
+      .header(band("Header", 3))
+      .footer(band("Footer", 2))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Blend modes, nested opacity, and isolation on overlapping circles.
+#[test]
+fn blend_opacity_isolation() {
+  run_pdf_fixture("blend-opacity", |fonts| {
+    let source = r#"<div style="display: flex; width: 100%; height: 100%; padding: 20px; background-color: #ffffff;">
+      <div style="display: flex; isolation: isolate; opacity: 0.9;">
+        <div style="width: 110px; height: 110px; border-radius: 50%; background-color: #ef4444; mix-blend-mode: multiply;"></div>
+        <div style="width: 110px; height: 110px; border-radius: 50%; margin-left: -40px; background-color: #3b82f6; mix-blend-mode: multiply;"></div>
+        <div style="width: 110px; height: 110px; border-radius: 50%; margin-left: -40px; background-color: #22c55e; mix-blend-mode: screen; opacity: 0.6;"></div>
+      </div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse blend fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((320, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// PDF/UA-2 asks every link inside a document to name a structure element. A
+/// link can point at anything with an id, including markup that carries no
+/// meaning of its own and would otherwise leave no element to name.
+#[test]
+fn a_link_target_without_meaning_still_gets_an_element() {
+  for target in [
+    r#"<div id="target">plain target div</div>"#,
+    r#"<div id="target"></div>"#,
+  ] {
+    let doc = format!(
+      r##"<div style="width:700px;font-size:20px">
+        <p><a href="#target">jump to target</a></p>
+        <h1>heading for the outline</h1>
+        {target}
+      </div>"##
+    );
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse anchor doc"))
+        .page(PageOptions::A4)
+        .tagged(Tagging::Ua2)
+        .standard(PdfStandard::A4)
+        .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+        .metadata(PdfMetadata {
+          title: Some("Anchors".into()),
+          creation_date: Some(PdfDate {
+            year: 2026,
+            month: 8,
+            day: 7,
+            hour: 0,
+            minute: 0,
+            second: 0,
+          }),
+          ..Default::default()
+        })
+        .fonts(&fonts())
+        .build(),
+    )
+    .expect("render anchor doc");
+
+    // The destination names this element, so the element has to be in the file.
+    assert!(
+      inflated_text(&pdf).contains("n.0.2"),
+      "the link target left no structure element to name: {target}"
+    );
+  }
+}
+
+/// A clip keeps content off the page, but a PDF clip does not keep it out of
+/// the text layer. Content an ancestor cuts away must never be emitted, or it
+/// stays extractable on whichever page its own geometry happens to land on.
+///
+/// The cut-away line is the only Chinese on the page, so the face it would need
+/// says whether it reached the file.
+#[test]
+fn a_clipped_away_line_reaches_no_page() {
+  let doc = r#"<div style="width:700px">
+    <div style="overflow:hidden;height:40px;background:#eee">
+      <div style="height:2600px">
+        <div style="margin-top:1500px;font-size:24px">裁掉的秘密</div>
+      </div>
+    </div>
+    <div style="font-size:24px;height:2200px">visible after box</div>
+  </div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse clipped doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render clipped doc");
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    embedded_subsets(&haystack, "Archivo") > 0,
+    "the fixture stopped covering what it was meant to keep"
+  );
+  assert_eq!(
+    embedded_subsets(&haystack, "NotoSansTC"),
+    0,
+    "content an overflow clip cuts away still reached the file"
+  );
+}
+
+/// Overflow clipping: rounded clip on both axes, and a single-axis clip that
+/// leaves the other axis unbounded.
+#[test]
+fn overflow_clipping() {
+  run_pdf_fixture("overflow-clip", |fonts| {
+    let source = r#"<div style="display: flex; width: 100%; height: 100%; padding: 16px; column-gap: 24px; background-color: #ffffff;">
+      <div style="overflow: hidden; border-radius: 24px; width: 140px; height: 110px; border: 2px solid #333333;">
+        <div style="width: 300px; height: 300px; background-image: linear-gradient(45deg, #f97316, #0ea5e9);"></div>
+      </div>
+      <div style="overflow-x: clip; width: 120px; height: 110px; border: 2px solid #999999;">
+        <div style="width: 300px; height: 80px; background-color: #a3e635;"></div>
+      </div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse overflow fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 150)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// An overflow clip on a scaled box scales its content once.
+#[test]
+fn transformed_overflow_clip() {
+  run_pdf_fixture("transformed-overflow-clip", |fonts| {
+    let source = r#"<div style="display: block; width: 100%; height: 100%; background-color: #ffffff;">
+      <div style="width: 100px; height: 100px; transform: scale(2); transform-origin: 0 0; overflow: hidden; background-color: #e2e8f0;">
+        <div style="width: 10px; height: 10px; background-color: #ff0000;"></div>
+      </div>
+    </div>"#;
+    let node =
+      from_html(source, FromHtmlOptions::default()).expect("parse transformed clip fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((240, 240)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Repeating gradient variants and a stacked multi-layer background.
+#[test]
+fn repeating_gradients() {
+  run_pdf_fixture("repeating-gradients", |fonts| {
+    let source = r#"<div style="display: flex; width: 100%; height: 100%; padding: 20px; column-gap: 20px; background-color: #ffffff;">
+      <div style="width: 110px; height: 110px; background-image: repeating-linear-gradient(45deg, #0f172a 0px, #0f172a 8px, #f8fafc 8px, #f8fafc 16px);"></div>
+      <div style="width: 110px; height: 110px; background-image: repeating-radial-gradient(circle, #7c3aed 0px, #7c3aed 10px, #ede9fe 10px, #ede9fe 20px);"></div>
+      <div style="width: 110px; height: 110px; background-image: linear-gradient(180deg, rgba(255, 0, 0, 0.5), rgba(255, 0, 0, 0)), conic-gradient(from 45deg, #fbbf24, #10b981, #fbbf24);"></div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse repeating fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((440, 160)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Decoration lines with custom colors, letter spacing, and variable weight.
+#[test]
+fn text_decorations() {
+  run_pdf_fixture("text-decorations", |fonts| {
+    let source = r#"<div style="display: flex; flex-direction: column; width: 100%; height: 100%; padding: 16px; row-gap: 8px; background-color: #ffffff; font-size: 18px; color: #111111;">
+      <div style="text-decoration-line: underline; text-decoration-color: #dc2626;">Underlined in red</div>
+      <div style="text-decoration-line: line-through;">Struck through</div>
+      <div style="text-decoration-line: overline underline;">Over and under</div>
+      <div style="letter-spacing: 4px;">Wide tracking</div>
+      <div style="font-weight: 700;">Bold weight text</div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse decorations fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((360, 220)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Images flowing across a page cut are atoms: the straddling image moves
+/// whole to the next page.
+#[test]
+fn paged_images() {
+  run_pdf_fixture("paged-images", |fonts| {
+    let checker = |dark: [u8; 4], light: [u8; 4]| {
+      let mut pixels = Vec::with_capacity(8 * 8 * 4);
+
+      for row in 0..8u32 {
+        for col in 0..8u32 {
+          let on = (row / 2 + col / 2) % 2 == 0;
+
+          pixels.extend_from_slice(if on { &dark } else { &light });
+        }
+      }
+      Node::image(ImageData {
+        src: ImageSourceInput::Rgba(RgbaImage::new(pixels, 8, 8, false).expect("rgba image")),
+        width: Some(120.0),
+        height: Some(120.0),
+      })
+    };
+    let children = vec![
+      text("Before the images", 14.0),
+      checker([220, 60, 60, 255], [255, 235, 235, 255]),
+      checker([60, 60, 220, 255], [235, 235, 255, 255]),
+      checker([60, 180, 90, 255], [230, 250, 235, 255]),
+      text("After the images", 14.0),
+    ];
+
+    PdfOptions::builder()
+      .node(column(children))
+      .page(PageOptions {
+        width: 300.0,
+        height: 260.0,
+        margin: PageMargins::uniform(20.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Degenerate inputs stay silent instead of panicking or emitting garbage:
+/// zero-sized boxes, empty and zero-font-size text, transparent paint.
+#[test]
+fn edge_degenerate() {
+  run_pdf_fixture("edge-degenerate", |fonts| {
+    let source = r#"<div style="display: flex; flex-direction: column; width: 100%; height: 100%; padding: 12px; row-gap: 6px; background-color: #ffffff;">
+      <div style="width: 0px; height: 40px; background-color: #ef4444;"></div>
+      <div style="width: 120px; height: 0px; background-color: #22c55e;"></div>
+      <div style="font-size: 14px;"> </div>
+      <div style="font-size: 0px;">Zero font size</div>
+      <div style="opacity: 0; font-size: 14px;">Fully transparent text</div>
+      <div style="width: 80px; height: 20px; background-color: rgba(0, 0, 0, 0); border: 2px solid rgba(255, 0, 0, 0);"></div>
+      <div style="width: 1px; height: 1px; background-color: #3b82f6;"></div>
+      <div style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #111111; background-color: #d4d4d8;"></div>
+      <div style="font-size: 13px; color: #111111;">Visible sentinel after the degenerates</div>
+    </div>"#;
+    let node = from_html(source, FromHtmlOptions::default()).expect("parse degenerate fixture");
+
+    PdfOptions::builder()
+      .node(node)
+      .viewport(Viewport::new((300, 260)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+fn wrapping_rows(count: usize) -> Node {
+  column(
+    (1..=count)
+      .map(|i| {
+        text(
+          &format!("Paragraph {i}: text long enough to wrap onto several lines when the page gets narrow, exercising line breaking against the page width"),
+          13.0,
+        )
+      })
+      .collect(),
+  )
+}
+
+/// The same wrapping content on a narrow tall page: many short lines, cuts
+/// landing mid-paragraph.
+#[test]
+fn paged_narrow() {
+  run_pdf_fixture("paged-narrow", |fonts| {
+    PdfOptions::builder()
+      .node(wrapping_rows(10))
+      .page(PageOptions {
+        width: 200.0,
+        height: 420.0,
+        margin: PageMargins::uniform(16.0),
+      })
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// The same wrapping content on landscape US Letter with a wide margin: long
+/// lines, few per page, preset + landscape + with_margin all in play.
+#[test]
+fn paged_landscape() {
+  run_pdf_fixture("paged-landscape", |fonts| {
+    PdfOptions::builder()
+      .node(wrapping_rows(60))
+      .page(PageOptions::LETTER.landscape().with_margin(60.0))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+#[test]
+fn invoice() {
+  run_pdf_fixture("invoice", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(invoice_page())
+      .footer(html_fixture("invoice-footer.html"))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// The invoice (paged, footer, gradients, links) renders under PDF/A-2b with
+/// an sRGB output intent, and under PDF/A-4 with a PDF 2.0 header.
+#[test]
+fn archival_standards() {
+  let a2b = run_pdf_fixture("invoice-pdfa-2b", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(invoice_page())
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A2b)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&a2b);
+
+  assert!(haystack.starts_with("%PDF-1.7"));
+  assert!(haystack.contains("GTS_PDFA1"), "missing output intent");
+
+  let a4 = run_pdf_fixture("invoice-pdfa-4", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(invoice_page())
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A4)
+      .fonts(fonts)
+      .build()
+  });
+
+  assert!(String::from_utf8_lossy(&a4).starts_with("%PDF-2.0"));
+}
+
+const FACTUR_X_NAMESPACE: &str = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#";
+
+fn factur_x_schema() -> XmpSchema {
+  XmpSchema {
+    name: "Factur-X PDF/A Extension".to_string(),
+    prefix: "fx".to_string(),
+    namespace: FACTUR_X_NAMESPACE.to_string(),
+    properties: vec![XmpProperty {
+      name: "DocumentFileName".to_string(),
+      value: "factur-x.xml".to_string(),
+      description: "name of the embedded XML invoice file".to_string(),
+    }],
+  }
+}
+
+/// A schema whose prefix cannot be an XML name rejects the render: the XMP
+/// writer would serialize it verbatim into a packet nothing can parse.
+#[test]
+fn invalid_xmp_schema_rejects() {
+  let metadata = PdfMetadata {
+    xmp: vec![XmpSchema {
+      prefix: "1fx bad".to_string(),
+      ..factur_x_schema()
+    }],
+    ..PdfMetadata::default()
+  };
+  let result = render(
+    PdfOptions::builder()
+      .node(text("invalid xmp", 16.0))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&fonts())
+      .metadata(metadata)
+      .build(),
+  );
+
+  assert!(matches!(result, Err(PdfError::InvalidXmpSchema(prefix)) if prefix == "1fx bad"));
+}
+
+/// A character no registered font covers shapes to `.notdef`. It paints nothing
+/// and leaves nothing in the text layer, so the render stops and names it
+/// instead of handing back a page with the character quietly gone.
+#[test]
+fn uncovered_character_stops_the_render() {
+  let latin_only = {
+    let mut fonts = Fonts::default();
+    let data = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"),
+    )
+    .expect("read test font");
+
+    fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+    fonts
+  };
+  let render_with = |content: &str| {
+    render(
+      PdfOptions::builder()
+        .node(text(content, 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .build(),
+    )
+  };
+
+  assert!(render_with("covered").is_ok());
+  assert!(
+    matches!(render_with("uncovered \u{76F4}"), Err(PdfError::UncoveredCharacters(named)) if named == "直 (U+76F4)")
+  );
+}
+
+/// `placeholder` draws glyph 0; `blank` leaves it out of the run.
+#[test]
+fn uncovered_character_renders_under_an_uncovered_text_policy() {
+  let latin_only = latin_font();
+  let render_with = |policy: UncoveredText| {
+    render(
+      PdfOptions::builder()
+        .node(text("uncovered \u{76F4}", 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .uncovered_text(policy)
+        .build(),
+    )
+  };
+
+  assert!(matches!(
+    render_with(UncoveredText::Error),
+    Err(PdfError::UncoveredCharacters(_))
+  ));
+
+  let placeholder = render_with(UncoveredText::Placeholder).expect("render with the placeholder");
+  let blank = render_with(UncoveredText::Blank).expect("render without the glyph");
+
+  assert!(
+    inflated_text(&placeholder).contains("(\\000\\000)"),
+    "the placeholder policy did not draw glyph 0"
+  );
+  assert!(
+    !inflated_text(&blank).contains("(\\000\\000)"),
+    "the blank policy drew glyph 0"
+  );
+}
+
+/// The render names the standard itself, rather than failing as a generic
+/// write error once krilla validates the file.
+#[test]
+fn a_forbidden_placeholder_names_the_standard() {
+  let latin_only = latin_font();
+  let render_with = |standard: PdfStandard, tagged: Tagging| {
+    render(
+      PdfOptions::builder()
+        .node(text("uncovered \u{76F4}", 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .uncovered_text(UncoveredText::Placeholder)
+        .standard(standard)
+        .tagged(tagged)
+        .build(),
+    )
+  };
+
+  assert_eq!(
+    render_with(PdfStandard::A2b, Tagging::On)
+      .expect_err("PDF/A-2b forbids the placeholder")
+      .to_string(),
+    "No registered font covers 直 (U+76F4), and PDF/A-2b forbids the placeholder glyph. \
+     Register a font that covers them, or set uncoveredText to \"blank\"."
+  );
+  assert!(matches!(
+    render_with(PdfStandard::None, Tagging::Ua1),
+    Err(PdfError::PlaceholderForbidden {
+      standard: "PDF/UA-1",
+      ..
+    })
+  ));
+  assert!(
+    render(
+      PdfOptions::builder()
+        .node(text("uncovered \u{76F4}", 16.0))
+        .viewport(Viewport::new((200, 100)))
+        .fonts(&latin_only)
+        .uncovered_text(UncoveredText::Blank)
+        .standard(PdfStandard::A2b)
+        .build(),
+    )
+    .is_ok(),
+    "the blank policy should satisfy PDF/A-2b"
+  );
+}
+
+/// A mark sharing a cluster with a covered letter rides that letter's source
+/// range back into the text layer, even with its own glyph dropped.
+#[test]
+fn an_uncovered_mark_survives_in_the_text_layer() {
+  let latin_only = latin_font();
+  // U+0301 COMBINING ACUTE ACCENT, which Archivo does not cover.
+  let accented = "e\u{301}";
+  let blank = render(
+    PdfOptions::builder()
+      .node(text(accented, 16.0))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&latin_only)
+      .uncovered_text(UncoveredText::Blank)
+      .build(),
+  )
+  .expect("render without the mark's glyph");
+
+  let bare = render(
+    PdfOptions::builder()
+      .node(text("e", 16.0))
+      .viewport(Viewport::new((200, 100)))
+      .fonts(&latin_only)
+      .build(),
+  )
+  .expect("render the letter alone");
+
+  // The bare letter is the control: no mark in the source, no such codepoint.
+  assert!(
+    !inflated_text(&bare).contains("0301"),
+    "the letter alone should map to no combining mark"
+  );
+  assert!(
+    inflated_text(&blank).contains("0301"),
+    "the mark left no trace in the text layer"
+  );
+}
+
+/// The invoice carries a machine-readable XML attachment under PDF/A-3b:
+/// the file spec, association kind, and name tree all serialize, the
+/// modification date falls back to the metadata creation date, and a custom
+/// XMP fragment lands inside the packet krilla writes.
+#[test]
+fn attachments() {
+  let attachment = || Attachment {
+    name: "factur-x.xml".to_string(),
+    data: b"<invoice total=\"1290\"/>".to_vec(),
+    mime_type: Some("application/xml".to_string()),
+    description: Some("Factur-X invoice data".to_string()),
+    relationship: AttachmentRelationship::Alternative,
+    modification_date: None,
+  };
+  let metadata = || PdfMetadata {
+    title: Some("Invoice".to_string()),
+    creation_date: Some(PdfDate {
+      year: 2026,
+      month: 8,
+      day: 6,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }),
+    xmp: vec![factur_x_schema()],
+    ..PdfMetadata::default()
+  };
+  let a3b = run_pdf_fixture("invoice-pdfa-3b-attachment", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(invoice_page())
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A3b)
+      .metadata(metadata())
+      .attachments(vec![attachment()])
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&a3b);
+
+  assert!(haystack.contains("factur-x.xml"), "missing file spec name");
+  assert!(haystack.contains("/EmbeddedFiles"), "missing name tree");
+  assert!(haystack.contains("/AFRelationship"), "missing association");
+  // Scoped to the embedded file's Params dict: the Info dict also carries a
+  // /ModDate, so a document-wide match would not prove the fallback.
+  assert!(
+    haystack.contains("/Params<</Size 23/ModDate(D:20260806000000Z)>>"),
+    "missing attachment modification date fallback"
+  );
+
+  let (packet, _) = haystack
+    .split_once("</rdf:RDF>")
+    .expect("missing XMP packet");
+
+  assert!(
+    packet.contains("<fx:DocumentFileName>factur-x.xml</fx:DocumentFileName>"),
+    "custom property missing from the packet"
+  );
+  // A packet carries at most one schema bag, so the custom entry has to land in
+  // the one krilla writes: a second bag makes the whole packet unparseable.
+  assert_eq!(
+    packet.matches("<pdfaExtension:schemas>").count(),
+    1,
+    "custom schema entry did not merge into the packet's schema bag"
+  );
+  assert!(
+    packet.contains(FACTUR_X_NAMESPACE),
+    "custom schema description missing from the packet"
+  );
+
+  // PDF/A-4f is the PDF 2.0 spelling of the same container.
+  let a4f = run_pdf_fixture("invoice-pdfa-4f-attachment", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("invoice.html"))
+      .page(invoice_page())
+      .footer(html_fixture("invoice-footer.html"))
+      .standard(PdfStandard::A4f)
+      .metadata(metadata())
+      .attachments(vec![attachment()])
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&a4f);
+
+  assert!(haystack.starts_with("%PDF-2.0"));
+  assert!(haystack.contains("/EmbeddedFiles"), "missing name tree");
+
+  let fonts = fonts();
+  let duplicate = render(
+    PdfOptions::builder()
+      .node(text("dup", 16.0))
+      .page(PageOptions::A4)
+      .attachments(vec![attachment(), attachment()])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(matches!(duplicate, Err(PdfError::DuplicateAttachment(name)) if name == "factur-x.xml"));
+
+  let invalid_mime = render(
+    PdfOptions::builder()
+      .node(text("mime", 16.0))
+      .page(PageOptions::A4)
+      .attachments(vec![Attachment {
+        mime_type: Some("not-a-mime".to_string()),
+        ..attachment()
+      }])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(matches!(invalid_mime, Err(PdfError::InvalidMimeType(mime)) if mime == "not-a-mime"));
+
+  // PDF/A-2 forbids arbitrary attachments; PDF/A-3 requires the descriptive
+  // fields and a date. These reach the render through Rust and wasm callers,
+  // which the TypeScript union cannot guard.
+  let a2b = render(
+    PdfOptions::builder()
+      .node(text("a2b", 16.0))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A2b)
+      .metadata(metadata())
+      .attachments(vec![attachment()])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(
+    matches!(a2b, Err(PdfError::Krilla(_))),
+    "A-2b must reject attachments"
+  );
+
+  for stripped in [
+    Attachment {
+      mime_type: None,
+      ..attachment()
+    },
+    Attachment {
+      description: None,
+      ..attachment()
+    },
+  ] {
+    let incomplete = render(
+      PdfOptions::builder()
+        .node(text("incomplete", 16.0))
+        .page(PageOptions::A4)
+        .standard(PdfStandard::A3b)
+        .metadata(metadata())
+        .attachments(vec![stripped])
+        .fonts(&fonts)
+        .build(),
+    );
+
+    assert!(
+      matches!(incomplete, Err(PdfError::Krilla(_))),
+      "A-3b must require the field"
+    );
+  }
+
+  let dateless = render(
+    PdfOptions::builder()
+      .node(text("dateless", 16.0))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3b)
+      .attachments(vec![attachment()])
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert!(
+    matches!(dateless, Err(PdfError::Krilla(_))),
+    "A-3b must require a date when the metadata fallback is absent"
+  );
+}
+
+/// A marker belongs to the page containing its line baseline, so a list item
+/// continuing across pages does not repeat the marker in later content streams.
+#[test]
+fn list_marker_pagination() {
+  let doc = r#"<ol style="font-size:16px;line-height:20px;margin:0;">
+    <li>one<br>two<br>three<br>four<br>five<br>six<br>seven<br>eight</li>
+  </ol>"#;
+  let fonts = fonts();
+  let page = PageOptions {
+    width: 240.0,
+    height: 75.0,
+    margin: PageMargins::uniform(0.0),
+  };
+  let pdf = run_pdf_fixture_with("list-marker-pagination", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse list doc"))
+      .page(page)
+      .tagged(Tagging::Off)
+      .fonts(fonts)
+      .build()
+  });
+  let without_marker = render(
+    PdfOptions::builder()
+      .node(
+        from_html(
+          &doc.replace("font-size:16px", "list-style:none;font-size:16px"),
+          FromHtmlOptions::default(),
+        )
+        .expect("parse markerless list doc"),
+      )
+      .page(page)
+      .tagged(Tagging::Off)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render markerless list");
+
+  assert_eq!(
+    text_show_operators(&pdf),
+    text_show_operators(&without_marker) + 1,
+    "the ordered marker was repeated across pages"
+  );
+}
+
+/// A non-marker in-flow inline box also belongs to the page that owns its
+/// line, so a paragraph continuing across pages paints the box once instead
+/// of on every page.
+#[test]
+fn inline_box_pagination() {
+  let doc = r#"<p style="font-size:16px;line-height:20px;margin:0;">one<br><span style="display:inline-block">boxed</span><br>three<br>four<br>five<br>six<br>seven<br>eight</p>"#;
+  let fonts = fonts();
+  let page = PageOptions {
+    width: 240.0,
+    height: 75.0,
+    margin: PageMargins::uniform(0.0),
+  };
+  let build = |source: &str| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(source, FromHtmlOptions::default()).expect("parse paragraph doc"))
+        .page(page)
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render paragraph doc")
+  };
+  let boxed = build(doc);
+  let plain = build(&doc.replace(
+    r#"<span style="display:inline-block">boxed</span>"#,
+    "boxed",
+  ));
+
+  assert_eq!(
+    text_show_operators(&boxed),
+    text_show_operators(&plain),
+    "the inline box was repeated across pages"
+  );
+}
+
+/// The tag tree matches tags exactly, so an uppercase `LI` earns no `LI`
+/// element. Its generated marker still has to reach the structure tree as
+/// leading content instead of failing the whole render.
+#[test]
+fn an_uppercase_list_item_renders_tagged() {
+  let item = Node::text("Loud item".to_string())
+    .with_tag_name("LI")
+    .with_style(
+      Style::default()
+        .with(StyleDeclaration::display(Display::ListItem))
+        .with(StyleDeclaration::list_style_type(ListStyleType::Decimal)),
+    );
+  let list = Node::container(vec![item]).with_tag_name("OL");
+  let pdf = render(
+    PdfOptions::builder()
+      .node(list)
+      .page(PageOptions {
+        width: 240.0,
+        height: 120.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render uppercase list item tagged");
+
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    !haystack.contains("/S/LI"),
+    "an uppercase tag unexpectedly earned an LI element"
+  );
+}
+
+/// A programmatic `display: list-item` box has no `LI` element to hold an
+/// `Lbl`, so its marker label joins the node's own content and reads first,
+/// matching the painted order.
+#[test]
+fn a_programmatic_list_item_reads_its_marker_first() {
+  let doc =
+    r#"<div style="display:list-item;list-style-type:decimal;font-size:16px;">item text</div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse"))
+      .page(PageOptions {
+        width: 240.0,
+        height: 120.0,
+        margin: PageMargins::uniform(0.0),
+      })
+      .tagged(Tagging::On)
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render");
+  let haystack = inflated_text(&pdf);
+
+  // The item's text paints first and takes MCID 0; the marker follows as
+  // MCID 1. The paragraph element still has to read the marker first.
+  assert!(
+    haystack.contains("/K[1 0"),
+    "the marker does not read before the item's content"
+  );
+}
+
+/// A float's band is one atom: a page cut may not slice through it, so a
+/// float crossing the would-be cut pushes the cut past its bottom edge.
+#[test]
+fn a_page_cut_does_not_slice_a_float() {
+  let fonts = fonts();
+  let window = |height: u32| {
+    let doc = format!(
+      r#"<p style="font-size:16px;line-height:20px;margin:0;"><span style="float:right;width:40px;height:{height}px;background:#f00;"></span>one<br>two<br>three<br>four<br>five<br>six</p>"#
+    );
+    let pdf = render(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse float doc"))
+        .page(PageOptions {
+          width: 240.0,
+          height: 75.0,
+          margin: PageMargins::uniform(0.0),
+        })
+        .tagged(Tagging::Off)
+        .fonts(&fonts)
+        .build(),
+    )
+    .expect("render float doc");
+
+    first_page_window(&pdf)
+  };
+  // 65px in page units; a float this tall spans the cut a short one permits.
+  let float_bottom = 65.0 * 0.75;
+
+  assert!(
+    window(10) < float_bottom,
+    "the short-float cut no longer lands where a tall float would sit"
+  );
+  assert!(
+    window(65) >= float_bottom,
+    "the page cut sliced through the float"
+  );
+}
+
+/// The height of the first page's window clip: how much of the document the
+/// first page shows, i.e. where the first page cut landed.
+fn first_page_window(pdf: &[u8]) -> f32 {
+  let lines: Vec<Vec<u8>> = content_lines(pdf).collect();
+
+  for pair in lines.windows(2) {
+    if !pair[0].ends_with(b" re") || !pair[1].starts_with(b"W") {
+      continue;
+    }
+    // The clip line reads `x y width height re`: the height sits second from
+    // the end.
+    let text = String::from_utf8_lossy(&pair[0]);
+    let height = text
+      .split_whitespace()
+      .rev()
+      .nth(1)
+      .and_then(|token| token.parse::<f32>().ok());
+
+    if let Some(height) = height {
+      return height.abs();
+    }
+  }
+  panic!("no page window clip found");
+}
+
+/// The report renders tagged under PDF/UA-1 and PDF/A-2a: heading structure,
+/// link alt text, document language, title and date all satisfy the
+/// validators, and the structure tree serializes.
+#[test]
+fn tagged_standards() {
+  let metadata = || PdfMetadata {
+    title: Some("Annual report".into()),
+    creation_date: Some(PdfDate {
+      year: 2026,
+      month: 8,
+      day: 6,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }),
+    ..Default::default()
+  };
+  let lang = || takumi_core::style::Lang::parse("en").expect("lang");
+  // PDF/UA-1 combined with PDF/A-2a: both validators run on one render.
+  let ua1 = run_pdf_fixture("report-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .standard(PdfStandard::A2a)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = String::from_utf8_lossy(&ua1);
+
+  assert!(
+    haystack.contains("StructTreeRoot"),
+    "missing structure tree"
+  );
+
+  let list_doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Checklist</h1>
+    <p>Steps with <strong>bold</strong> and <code>code</code>:</p>
+    <ul><li>First item</li><li>Second item</li></ul>
+    <ol><li>Ordered one</li><li>Ordered two</li></ol>
+    <ol style="list-style-type:upper-roman"><li>Roman one</li></ol>
+  </main>"#;
+
+  let list = run_pdf_fixture("list-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(list_doc, FromHtmlOptions::default()).expect("parse list doc"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&list);
+
+  for name in [
+    "/S/LI",
+    "/S/Lbl",
+    "/S/LBody",
+    "/ListNumbering/Disc",
+    "/ListNumbering/Decimal",
+    "/ListNumbering/UpperRoman",
+  ] {
+    assert!(haystack.contains(name), "missing {name} structure element");
+  }
+  assert_eq!(haystack.matches("/S/Lbl").count(), 5);
+
+  run_pdf_fixture("report-tagged-a2a", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A2a)
+      .lang(Some(lang()))
+      .metadata(metadata())
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// An inline-block lays out in a subtree of its own. Its content still belongs
+/// to the structure tree, down to the elements nested inside it.
+#[test]
+fn tagged_inline_block_subtree() {
+  let source = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Report</h1>
+    <div>Before <span style="display:inline-block;width:160px;"><span style="display:inline-block;"><h2>Inner heading</h2></span></span> after</div>
+  </main>"#;
+
+  let pdf = run_pdf_fixture("inline-block-tagged", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse inline-block doc"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Report".into()),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  assert!(
+    inflated_text(&pdf).contains("/S/H2"),
+    "the element inside the inline-block never reached the structure tree"
+  );
+}
+
+/// Every structure element takumi emits, under PDF/A-4. A PDF 2.0 tag carries a
+/// namespace and a role map that the PDF 1.7 fixtures never exercise.
+#[test]
+fn structure_types_pdf20() {
+  let doc = r##"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1 id="top">Structure types</h1>
+    <section>
+      <h2>Prose</h2>
+      <p>A paragraph with <strong>bold</strong>, <em>italic</em> and <code>code</code>.</p>
+      <blockquote>A quotation on its own.</blockquote>
+    </section>
+    <article>
+      <h3>Lists</h3>
+      <ul><li>Unordered one</li><li>Unordered two</li></ul>
+      <ol><li>Ordered one</li><li>Ordered two</li></ol>
+    </article>
+    <figure>
+      <img src="pixel" alt="a grey square" style="width:40px;height:40px;" />
+      <figcaption>A described pixel.</figcaption>
+    </figure>
+    <p><a href="#top">Back to the top</a> and <a href="https://example.com">out to the web</a>.</p>
+  </main>"##;
+  let pdf = run_pdf_fixture("structure-types-a4", |fonts| {
+    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse structure doc"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A4)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Structure types".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 8,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for name in [
+    "/Sect",
+    "/Art",
+    "/H1",
+    "/H2",
+    "/H3",
+    "/P",
+    "/BlockQuote",
+    "/L",
+    "/LI",
+    "/Lbl",
+    "/LBody",
+    "/Figure",
+    "/Caption",
+    "/Link",
+  ] {
+    assert!(haystack.contains(name), "missing {name} structure element");
+  }
+}
+
+/// A lowered table surfaces as `Table → THead/TBody/TFoot → TR → TH/TD` with
+/// a `Caption`, `Scope` on header cells and `RowSpan`/`ColSpan` on spanning
+/// cells, per ISO 14289-2:2024 §8.2.5.26.
+#[test]
+fn table_structure_tags() {
+  let doc = r##"<div style="width:700px;font-size:14px;color:#141414">
+    <h1>Quarterly totals</h1>
+    <table>
+      <caption>Quarterly totals</caption>
+      <thead><tr><th>Region</th><th>Q1</th><th>Q2</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">North</th><td>10</td><td>20</td></tr>
+        <tr><th scope="row" rowspan="2">South</th><td>30</td><td>40</td></tr>
+        <tr><td colspan="2">subtotal</td></tr>
+      </tbody>
+      <tfoot><tr><td>Total</td><td>40</td><td>60</td></tr></tfoot>
+    </table>
+  </div>"##;
+  let pdf = run_pdf_fixture("table-tagged-ua2", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse table doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A4)
+      .tagged(Tagging::Ua2)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Quarterly totals".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 30,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for name in [
+    "/Table",
+    "/THead",
+    "/TBody",
+    "/TFoot",
+    "/TR",
+    "/TH",
+    "/TD",
+    "/Caption",
+    "/Scope",
+    "/RowSpan 2",
+    "/ColSpan 2",
+  ] {
+    assert!(haystack.contains(name), "missing {name} in the table tags");
+  }
+}
+
+/// PDF/UA-2 rides on PDF 2.0, so it pairs with PDF/A-4 and validates the same
+/// structure tree PDF/UA-1 does.
+#[test]
+fn tagged_ua2() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Accessible report</h1>
+    <p>A paragraph of prose.</p>
+    <h2>Findings</h2>
+    <ul><li>First finding</li><li>Second finding</li></ul>
+    <figure>
+      <img src="pixel" alt="a grey square" style="width:40px;height:40px;" />
+      <figcaption>A described pixel.</figcaption>
+    </figure>
+  </main>"#;
+  let pdf = run_pdf_fixture("report-tagged-ua2", |fonts| {
+    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse ua2 doc"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A4)
+      .tagged(Tagging::Ua2)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Accessible report".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 8,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.contains("<pdfuaid:part>2</pdfuaid:part>"),
+    "missing PDF/UA-2 identification"
+  );
+  assert!(
+    haystack.contains("/IDTree"),
+    "outline destinations did not name a structure element"
+  );
+}
+
+/// A border decoration is content no reader should announce, so it belongs in
+/// an artifact sequence. A border that paints nothing belongs in no sequence at
+/// all: an empty `BMC`/`EMC` pair is a region with nothing in it.
+#[test]
+fn tagged_borders_are_artifacts() {
+  let doc = r#"<main style="display:flex;flex-direction:column;gap:8px;font-size:14px;color:#141414;">
+    <h1>Borders</h1>
+    <p style="border:3px dashed #b91c1c;padding:4px;">Dashed all round</p>
+    <p style="border-top:4px solid rgba(255,0,0,0);border-left:2px solid rgba(0,0,255,0);padding:4px;">Invisible sides</p>
+  </main>"#;
+  let pdf = run_pdf_fixture("borders-tagged-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse border doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3a)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Borders".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 9,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+  let stroke = haystack
+    .find(" d ")
+    .expect("no dashed stroke in the content stream");
+  let opened = haystack[..stroke]
+    .rfind("/Artifact BMC")
+    .expect("the dashed border opened no artifact");
+
+  assert!(
+    !haystack[opened..stroke].contains("EMC"),
+    "the dashed border strokes outside its artifact"
+  );
+  for region in haystack.split("/Artifact BMC").skip(1) {
+    let region = &region[..region.find("EMC").expect("an artifact was never closed")];
+
+    assert!(
+      region
+        .split_whitespace()
+        .any(|token| matches!(token, "f" | "f*" | "S" | "Do")),
+      "an artifact holds no painted content: {region:?}"
+    );
+  }
+}
+
+/// PDF/UA-2 requires the catalog to declare the document language, so a render
+/// without one fails instead of writing a file that claims conformance.
+#[test]
+fn tagged_ua2_needs_lang() {
+  let doc = "<main><h1>No language</h1></main>";
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse ua2 doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A4)
+      .tagged(Tagging::Ua2)
+      .metadata(PdfMetadata {
+        title: Some("No language".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 8,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("a document without a language cannot claim PDF/UA-2");
+
+  assert!(
+    format!("{error:?}").contains("NoDocumentLanguage"),
+    "unexpected error: {error:?}"
+  );
+}
+
+/// An image inside a wrapper is an inline box rather than a node of its own,
+/// so it draws from the inline layout. Only a direct child of the root used to
+/// reach the page.
+#[test]
+fn inline_images() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <div><img src="wrapped" alt="wrapped in a div" style="width:40px;height:40px;" /></div>
+    <div style="display:block">Text before <img src="inline" alt="between words" style="width:20px;height:20px;opacity:0.5;" /> and after.</div>
+  </main>"#;
+  let pdf = run_pdf_fixture("inline-images", |fonts| {
+    // Distinct pixels: krilla dedups images by content, so one bitmap for both
+    // would let a single painted box satisfy the assertion below.
+    let wrapped = ImageBuffer::from_rgba_bytes(vec![64; 4 * 4 * 4], 4, 4).expect("image buffer");
+    let inline = ImageBuffer::from_rgba_bytes(vec![192; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse image doc"))
+      .images(HashMap::from([
+        ("wrapped".into(), ImageSource::Bitmap(Arc::new(wrapped))),
+        ("inline".into(), ImageSource::Bitmap(Arc::new(inline))),
+      ]))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for name in ["/x0 Do", "/x1 Do"] {
+    assert!(
+      haystack.contains(name),
+      "an inline image never reached the page: {name} missing"
+    );
+  }
+  // The second image is half transparent, and an inline box gets its paint
+  // state here rather than from the paint list.
+  assert!(
+    haystack.contains("/ca 0.5"),
+    "an inline image ignored its opacity"
+  );
+}
+
+/// A decorated inline image paints its background, shadow, and border as
+/// artifacts, which cannot open inside the image's own tag in the same stream.
+#[test]
+fn inline_image_decorations_in_a_tagged_document() {
+  let doc = r#"<div style="display:block;font-size:14px;">Text before <img src="inline" alt="decorated" style="width:20px;height:20px;background-color:#00f;border:2px solid #f00;box-shadow:2px 2px #0f0;" /> and a faded <img src="inline" alt="faded" style="width:20px;height:20px;opacity:0.5;border:2px solid #f00;box-shadow:2px 2px #0f0;" /> after.</div>"#;
+  let pdf = run_pdf_fixture("inline-image-decorations", |fonts| {
+    let inline = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse image doc"))
+      .images(HashMap::from([(
+        "inline".into(),
+        ImageSource::Bitmap(Arc::new(inline)),
+      )]))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/x0 Do").count(),
+    2,
+    "expected both decorated inline images on the page"
+  );
+  assert!(
+    haystack.contains("/ca 0.5"),
+    "expected the faded inline image at half opacity"
+  );
+}
+
+/// CSS trims a replaced element to its content edge curve, so `border-radius`
+/// on an `<img>` rounds the picture and not only the box behind it.
+#[test]
+fn a_rounded_image_is_clipped_to_its_corner_curve() {
+  let render_with = |radius: &str| {
+    let doc = format!(
+      r#"<div style="display:flex;padding:20px;background-color:#ffffff;"><img src="photo" style="width:200px;height:200px;border-radius:{radius};" /></div>"#
+    );
+    let photo = ImageBuffer::from_rgba_bytes(vec![64; 8 * 8 * 4], 8, 8).expect("image buffer");
+
+    render_pinned(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse image doc"))
+        .images(HashMap::from([(
+          "photo".into(),
+          ImageSource::Bitmap(Arc::new(photo)),
+        )]))
+        .page(PageOptions::A4)
+        .fonts(&fonts())
+        .build(),
+    )
+  };
+
+  let rounded = render_with("60px");
+  let square = render_with("0");
+
+  assert!(
+    inflated_text(&rounded).contains("/x0 Do"),
+    "the image never reached the page"
+  );
+  // The image fits its box, so nothing overflows: the only curve on the page is
+  // the corner the picture is trimmed to.
+  assert_eq!(curve_operator_lines(&square), 0);
+  assert_eq!(curve_operator_lines(&rounded), 1);
+}
+
+/// CSS 2.1 Appendix E paints the outline last, so a negative `outline-offset`
+/// draws over the box's own text instead of under it.
+#[test]
+fn outline_over_content() {
+  let doc = r#"<main style="display:flex;font-size:40px;color:#141414;"><div style="display:block;outline:8px solid #ff0000;outline-offset:-8px;background-color:#ffffff;">TEXT</div></main>"#;
+  let pdf = run_pdf_fixture("outline-over-content", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse outline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+  let outline = haystack.find("1 0 0 rg").expect("no outline fill");
+  let glyphs = haystack.find("Tj").or_else(|| haystack.find("TJ"));
+
+  assert!(
+    glyphs.is_some_and(|glyphs| outline > glyphs),
+    "the outline painted under the text"
+  );
+}
+
+/// The outline paints after the box's content but still under the box's own
+/// transform, so a rotated box's outline rotates with it.
+#[test]
+fn outline_under_transform() {
+  let doc = r#"<main style="display:flex;font-size:30px;color:#141414;"><div style="display:block;transform:rotate(20deg);outline:6px solid #ff0000;">TEXT</div></main>"#;
+  let pdf = run_pdf_fixture("outline-under-transform", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse outline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  // The outline's fill has to sit inside the box's own rotation, so the two
+  // land in the same `q` block.
+  let haystack = inflated_text(&pdf);
+  let block = haystack
+    .split("q ")
+    .find(|block| block.contains("1 0 0 rg"))
+    .expect("no outline fill");
+
+  assert!(
+    block.starts_with("0.7047695 -0.2565151"),
+    "the outline painted outside the box transform"
+  );
+}
+
+/// An inline-level container is laid out by the inline layout, not the paint
+/// list, so it needs a layout pass and a scene of its own to reach the page.
+#[test]
+fn inline_containers() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:20px;color:#141414;">
+    <div style="display:block">before <span style="display:inline-block;background-color:#ff0000;">block</span> after</div>
+    <div style="display:block">before <span style="display:inline-flex;background-color:#00ff00;"><span>fl</span><span>ex</span></span> after</div>
+    <div style="display:block">before <span style="display:inline-block;background-color:#0000ff;"><span style="display:inline-block;background-color:#ffff00;">nested</span></span> after</div>
+    <div style="display:block"><span style="float:left;width:30px;height:30px;background-color:#ff00ff;"></span>floated</div>
+  </main>"#;
+  let pdf = run_pdf_fixture("inline-containers", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse inline doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for (name, fill) in [
+    ("inline-block", "1 0 0 rg"),
+    ("inline-flex", "0 1 0 rg"),
+    ("nested inline-block", "1 1 0 rg"),
+    ("float", "1 0 1 rg"),
+  ] {
+    assert!(haystack.contains(fill), "{name} never reached the page");
+  }
+  assert!(
+    haystack.matches("Tj").count() + haystack.matches("TJ").count() > 8,
+    "text inside the inline containers is missing"
+  );
+}
+
+/// `alt=""` marks an image decorative: its content is an artifact and no
+/// `Figure` element enters the structure tree. A non-empty `alt` still
+/// produces a `Figure` that satisfies PDF/UA-1.
+#[test]
+fn decorative_image_artifact() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Images</h1>
+    <img src="pixel" alt="" style="width:40px;height:40px;" />
+    <img src="pixel" alt="a described pixel" style="width:40px;height:40px;" />
+  </main>"#;
+  let pdf = run_pdf_fixture("decorative-image-ua1", |fonts| {
+    let buffer = ImageBuffer::from_rgba_bytes(vec![128; 4 * 4 * 4], 4, 4).expect("image buffer");
+
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse image doc"))
+      .images(HashMap::from([(
+        "pixel".into(),
+        ImageSource::Bitmap(Arc::new(buffer)),
+      )]))
+      .page(PageOptions::A4)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Images".into()),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/S/Figure").count(),
+    1,
+    "decorative image must not produce a Figure element"
+  );
+}
+
+#[test]
+fn certificate() {
+  run_pdf_fixture("certificate", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("certificate.html"))
+      .viewport(Viewport::new((1123, 794)))
+      .fonts(fonts)
+      .build()
+  });
+}
+
+/// Headings across a forced page break become outline entries; anchors become
+/// link annotations on the page owning their box. An `href="#id"` resolves to
+/// a destination in the document, and one pointing at no element is dropped.
+#[test]
+fn report_links_outline() {
+  let pdf = run_pdf_fixture("report-links-outline", |fonts| {
+    PdfOptions::builder()
+      .node(html_fixture("report.html"))
+      .page(PageOptions::A4)
+      .outline(true)
+      .metadata(PdfMetadata {
+        title: Some("Annual report".into()),
+        description: Some("Fixture exercising metadata, links, and outline".into()),
+        authors: vec!["Takumi".into()],
+        keywords: vec!["report".into(), "fixture".into()],
+        creator: Some("takumi-pdf fixtures".into()),
+        creation_date: None,
+        xmp: Vec::new(),
+      })
+      .fonts(fonts)
+      .build()
+  });
+
+  // `inflated_text` inflates every deflated stream, so a substring check finds
+  // what it is after wherever the object ended up.
+  let haystack = inflated_text(&pdf);
+
+  for needle in [
+    "https://example.com/numbers",
+    "https://example.com/data",
+    "/Dest",
+    // A percent-encoded fragment resolves to the id it decodes to.
+    "(#raw%20data)",
+    "/Outlines",
+  ] {
+    assert!(haystack.contains(needle), "missing {needle} in pdf");
+  }
+
+  assert!(
+    !haystack.contains("#nowhere"),
+    "a fragment matching no element still produced an annotation"
+  );
+}
+
+/// Measuring at a page lays out at the full page width; counter hooks are
+/// filled with three-digit numbers so a counter-only band measures its real
+/// height.
+#[test]
+fn measure_band_at_page_width() {
+  let fonts = fonts();
+  let band = from_html(
+    r#"<div style="display: flex; justify-content: center; font-size: 12px;">
+      Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+    </div>"#,
+    FromHtmlOptions::default(),
+  )
+  .expect("parse band");
+  let size = measure(
+    MeasureOptions::builder()
+      .node(band)
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure band");
+
+  assert_eq!(size.width, PageOptions::A4.width.floor());
+  assert!(size.height >= 12.0, "band height {}", size.height);
+}
+
+/// Measuring reports the size the tree laid out at, not the size it was laid
+/// out against. A box narrower than the page measures its own width.
+#[test]
+fn measure_reports_content_width() {
+  let fonts = fonts();
+  let node = || {
+    from_html(
+      r#"<div style="border: 1px solid #000; width: 100px; height: 100px;">A</div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse node")
+  };
+  let at_page = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at page");
+
+  assert_eq!((at_page.width, at_page.height), (100.0, 100.0));
+
+  let at_viewport = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((600, Some(400))))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at viewport");
+
+  assert_eq!((at_viewport.width, at_viewport.height), (100.0, 100.0));
+}
+
+/// Without a page, measurement uses the viewport; omitting both is an error.
+#[test]
+fn measure_viewport_and_missing_viewport() {
+  let fonts = fonts();
+  let node = || {
+    from_html(
+      r#"<div style="font-size: 16px;">A line of wrapped text that needs several rows at a narrow width</div>"#,
+      FromHtmlOptions::default(),
+    )
+    .expect("parse node")
+  };
+  let narrow = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((120, None)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at viewport");
+  let wide = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((600, None)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure at wide viewport");
+
+  assert!(narrow.height > wide.height);
+  assert!(
+    measure(MeasureOptions::builder().node(node()).fonts(&fonts).build()).is_err(),
+    "expected MissingViewport"
+  );
+}
+
+/// Font programs that leave the plain TrueType path: CFF outlines become a
+/// `CIDFontType0`, colour tables become `Type3` glyph procedures, and a
+/// collection file carries several faces. Scripts that reorder or join while
+/// shaping ride along, because their `ToUnicode` maps are what the `u` and `a`
+/// levels require. Every level renders the same document, so CI's veraPDF step
+/// validates each conformance claim the renderer can make.
+#[test]
+fn font_format_standards() {
+  let mut fonts = Fonts::default();
+  let mut families = Vec::new();
+
+  for path in [
+    "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "../assets/fonts/cjk-locl-test/CJKLoclTest.woff2",
+    "../assets/fonts/ubuntu/Ubuntu.ttc",
+    "../assets/fonts/twemoji/TwemojiMozilla-colr.woff2",
+    "../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
+    "../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+    let registered = fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+
+    families.push(registered.first().expect("registered family").name.clone());
+  }
+
+  let [base, cff, collection, colr, arabic, devanagari]: [String; 6] =
+    families.try_into().expect("six families");
+  let doc = format!(
+    r#"<main style="display:flex;flex-direction:column;font-family:{base};font-size:16px;color:#141414;">
+      <h1>Font formats</h1>
+      <p lang="zh" style="font-family:{cff};">直 骨 今 海 真 令 説 器</p>
+      <p style="font-family:{collection};">A face out of a TrueType collection</p>
+      <p style="font-family:{colr};">Colour glyphs 🎉 🚀</p>
+      <p lang="ar" style="font-family:{arabic};">نص عربي للتشكيل</p>
+      <p lang="hi" style="font-family:{devanagari};">संयुक्ताक्षर क्षत्र</p>
+    </main>"#
+  );
+  let metadata = || PdfMetadata {
+    title: Some("Font formats".into()),
+    creation_date: Some(PdfDate {
+      year: 2026,
+      month: 8,
+      day: 7,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    }),
+    ..Default::default()
+  };
+
+  for (name, standard) in [
+    ("2b", PdfStandard::A2b),
+    ("2u", PdfStandard::A2u),
+    ("2a", PdfStandard::A2a),
+    ("3b", PdfStandard::A3b),
+    ("3u", PdfStandard::A3u),
+    ("3a", PdfStandard::A3a),
+    ("4", PdfStandard::A4),
+  ] {
+    // PDF/UA-1 is PDF 1.7 only, so it cannot ride along with PDF/A-4.
+    let tagging = if standard == PdfStandard::A4 {
+      Tagging::On
+    } else {
+      Tagging::Ua1
+    };
+    let pdf = run_pdf_fixture_with(&format!("font-formats-pdfa-{name}"), &fonts, |fonts| {
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse font doc"))
+        .page(PageOptions::A4)
+        .standard(standard)
+        .tagged(tagging)
+        .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+        .metadata(metadata())
+        .fonts(fonts)
+        .build()
+    });
+    let haystack = inflated_text(&pdf);
+
+    for subtype in ["/CIDFontType0", "/CIDFontType2", "/Type3"] {
+      assert!(
+        haystack.contains(subtype),
+        "missing {subtype} font in font-formats-pdfa-{name}"
+      );
+    }
+    // A paragraph in another language says so, so a reader switches voice
+    // rather than reading Arabic aloud in English.
+    for lang in ["/Lang(zh)", "/Lang(ar)", "/Lang(hi)"] {
+      assert!(
+        haystack.contains(lang),
+        "missing {lang} in font-formats-pdfa-{name}"
+      );
+    }
+  }
+}
+
+/// An inline box carries its own language, and the text around it goes back to
+/// the paragraph's when the box ends. Both sit on a path of their own: the box
+/// is tagged where the inline run places it, not where a block would be, and
+/// the owner reopens after it.
+///
+/// The box's own subtree is a separate matter. It renders through a nested
+/// emitter that tags nothing at all, so the Hindi word inside it reaches the
+/// page unmarked.
+#[test]
+fn inline_box_language() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1>Inline language</h1>
+    <p lang="ar">before <span style="display:inline-block;" lang="hi">inside</span> after</p>
+  </main>"#;
+  let pdf = run_pdf_fixture("inline-box-lang-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse inline lang doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3a)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Inline language".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 7,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert!(
+    haystack.matches("/Lang(ar)").count() >= 2,
+    "the paragraph's language stops at the inline box instead of resuming after it"
+  );
+  assert!(
+    haystack.contains("/Lang(hi)"),
+    "the inline box does not carry its own language"
+  );
+}
+
+/// HTML numbers headings for looks, so a document can open at `h2` or jump
+/// from `h1` to `h4`. PDF/UA rejects both, and rejects a list item without a
+/// list around it. The structure tree renumbers by nesting depth and gives an
+/// orphan item a list of its own. An empty heading is dropped without shifting
+/// the ones that follow, and a heading whose text sits in child elements still
+/// reaches the outline, which PDF/UA requires.
+#[test]
+fn heading_levels_and_orphan_list_item() {
+  let doc = r#"<main style="display:flex;flex-direction:column;font-size:14px;color:#141414;">
+    <h1></h1>
+    <h2>Opens below h1</h2>
+    <p>Body</p>
+    <h4>Skips two levels</h4>
+    <h3>Wrapped <strong>bold</strong> text</h3>
+    <li>An item with no list</li>
+  </main>"#;
+  let pdf = run_pdf_fixture("heading-levels-ua1", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse heading doc"))
+      .page(PageOptions::A4)
+      .standard(PdfStandard::A3a)
+      .tagged(Tagging::Ua1)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .metadata(PdfMetadata {
+        title: Some("Headings".into()),
+        creation_date: Some(PdfDate {
+          year: 2026,
+          month: 8,
+          day: 7,
+          hour: 0,
+          minute: 0,
+          second: 0,
+        }),
+        ..Default::default()
+      })
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  for name in ["/S/H1", "/S/H2", "/S/L", "/S/LI"] {
+    assert!(haystack.contains(name), "missing {name} structure element");
+  }
+  assert!(
+    !haystack.contains("/S/H4"),
+    "heading levels reached the file unnormalized"
+  );
+  // The structure element carries the same text under `/T`, so the outline's
+  // own key is what proves the entry reached the bookmarks.
+  assert!(
+    haystack.contains("/Title(Wrapped bold text)"),
+    "heading with inline children missing from the outline"
+  );
+}
+
+/// Distinct subsets embedded for a family. Each one is written as
+/// `/BaseFont/ABCDEF+Family`, with one tag per instanced font.
+fn embedded_subsets(haystack: &str, family: &str) -> usize {
+  haystack
+    .match_indices("/BaseFont/")
+    .filter_map(|(index, marker)| {
+      haystack[index + marker.len()..]
+        .split(|c: char| !(c.is_ascii_alphanumeric() || "+-,#".contains(c)))
+        .next()
+    })
+    .filter(|name| {
+      name
+        .split_once('+')
+        .is_some_and(|(_, rest)| rest.starts_with(family))
+    })
+    .collect::<HashSet<_>>()
+    .len()
+}
+
+/// A variable font must be embedded at the weight the run was shaped at, once
+/// per weight. A face with no bold or italic of its own gets the same faux bold
+/// and faux oblique the raster renderer applies, so weight survives across
+/// scripts either way.
+#[test]
+fn font_weights() {
+  let mut fonts = Fonts::default();
+  let mut families = Vec::new();
+
+  for path in [
+    "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+    "../assets/fonts/noto-sans/NotoSansTC-VariableFont_wght.woff2",
+    "../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2",
+    "../assets/fonts/noto-sans/noto-sans-devanagari-v30-devanagari-regular.woff2",
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+    let registered = fonts
+      .register(FontResource::new(data))
+      .expect("load test font");
+
+    families.push(registered.first().expect("registered family").name.clone());
+  }
+
+  let [latin, chinese, arabic, devanagari]: [String; 4] =
+    families.try_into().expect("four families");
+  let weights = [100, 300, 400, 600, 700, 900];
+  let latin_rows = weights
+    .iter()
+    .map(|weight| {
+      format!(r#"<p style="font-weight:{weight};">Weight {weight} · Variable axis</p>"#)
+    })
+    .collect::<String>();
+  let chinese_rows = weights
+    .iter()
+    .map(|weight| {
+      format!(r#"<p lang="zh-Hant" style="font-family:{chinese};font-weight:{weight};">字重 {weight} 的中文字樣</p>"#)
+    })
+    .collect::<String>();
+  let doc = format!(
+    r#"<main style="display:flex;flex-direction:column;font-family:{latin};font-size:16px;color:#141414;">
+      <h1 style="font-weight:700;">Font weights</h1>
+      {latin_rows}
+      <p style="font-style:italic;">Oblique from the same variable face</p>
+      {chinese_rows}
+      <p lang="ar" style="font-family:{arabic};font-weight:700;">نص عربي عريض</p>
+      <p lang="ar" style="font-family:{arabic};">نص عربي عادي</p>
+      <p lang="hi" style="font-family:{devanagari};font-weight:700;">मोटा देवनागरी</p>
+      <p lang="hi" style="font-family:{devanagari};font-style:italic;">तिरछा देवनागरी</p>
+      <p lang="hi" style="font-family:{devanagari};font-weight:700;background-image:linear-gradient(90deg,#ff5f6d,#3a1c71);background-clip:text;color:transparent;">मोटा देवनागरी</p>
+    </main>"#
+  );
+
+  let pdf = run_pdf_fixture_with("font-weights", &fonts, |fonts| {
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse weights doc"))
+      .page(PageOptions::A4)
+      .lang(Some(takumi_core::style::Lang::parse("en").expect("lang")))
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  // One embedded subset per weight: a single subset would mean they all fell
+  // back to the variable font's default instance.
+  assert_eq!(
+    embedded_subsets(&haystack, "Archivo"),
+    weights.len(),
+    "variable latin face not embedded once per weight"
+  );
+  assert_eq!(
+    embedded_subsets(&haystack, "NotoSansTC"),
+    weights.len(),
+    "variable chinese face not embedded once per weight"
+  );
+  // Faux bold strokes what it fills, which is text rendering mode 2.
+  assert!(
+    haystack.contains(" 2 Tr"),
+    "no synthesized bold for the static faces"
+  );
+  // `background-clip: text` paints through the widened outline as well, so the
+  // gradient reaches the stroke colour and not only the fill.
+  assert!(
+    haystack.contains("/Pattern CS"),
+    "clip-text background missing from the synthesized bold outline"
+  );
+  // The clipped text is transparent, and a colour's alpha lives beside its
+  // paint. A stroke built from the paint alone outlines it in solid black.
+  assert!(
+    stroke_alphas(&haystack).contains(&0.0),
+    "faux bold outlines transparent text opaquely"
+  );
+}
+
+#[test]
+fn cid_default_width_is_an_integer() {
+  let mut fonts = Fonts::default();
+  // A face whose units per em is not 1000 converts to fractional PDF widths, and
+  // `/DW` is where the width most glyphs share is written once.
+  let data = fs::read(
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../assets/fonts/sil/scheherazade-new-v17-arabic-regular.woff2"),
+  )
+  .expect("read arabic font");
+  let arabic = fonts
+    .register(FontResource::new(data))
+    .expect("load arabic font")
+    .first()
+    .expect("registered family")
+    .name
+    .clone();
+
+  let doc = format!(
+    r#"<main style="display:flex;flex-direction:column;font-size:16px;color:#141414;">
+      <p lang="ar" style="font-family:{arabic};">نص عربي عادي بحروف متكررة</p>
+    </main>"#
+  );
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(from_html(&doc, FromHtmlOptions::default()).expect("parse arabic doc"))
+      .page(PageOptions::A4)
+      .lang(Some(takumi_core::style::Lang::parse("ar").expect("lang")))
+      .fonts(&fonts)
+      .build(),
+  );
+
+  let widths = default_widths(&pdf);
+
+  assert!(!widths.is_empty(), "no /DW entry in the document");
+
+  // PDF 32000-1 9.7.4.3 types `/DW` as an integer. Poppler ignores a real one
+  // and falls back to the spec default of 1000 instead.
+  for width in &widths {
+    assert!(!width.contains('.'), "/DW written as a real: {width}");
+  }
+
+  let defaults: Vec<f32> = widths
+    .iter()
+    .map(|width| width.parse().expect("/DW is a number"))
+    .collect();
+
+  // Rounding `/DW` leaves the glyphs that shared the fractional width unequal to it, so
+  // `/W` has to carry them rather than lose their advance. Such a glyph is the one whose
+  // own width rounds to a `/DW` without matching it.
+  assert!(
+    exception_widths(&pdf).iter().any(|width| defaults
+      .iter()
+      .any(|default| width != default && (width - default).abs() < 0.5)),
+    "no /W entry carries a glyph the rounded /DW displaced"
+  );
+}
+
+/// A page counter renders in whatever counter style it is given, and a
+/// non-decimal style reaches for characters no latin face carries. The counter
+/// is generated rather than authored, so nothing in the document tells the
+/// caller which font it will need.
+#[test]
+fn counter_style_needs_a_covering_font() {
+  let rows: String = (1..=60)
+    .map(|row| format!(r#"<div style="font-size:16px">Row {row}</div>"#))
+    .collect();
+  let doc = format!(r#"<div style="display:flex;flex-direction:column;width:100%">{rows}</div>"#);
+  let footer = r#"<div style="display:flex;font-size:12px"><span class="totalPages trad-chinese-informal"></span></div>"#;
+  let paged = |fonts: &Fonts| {
+    render(
+      PdfOptions::builder()
+        .node(from_html(&doc, FromHtmlOptions::default()).expect("parse counter doc"))
+        .footer(from_html(footer, FromHtmlOptions::default()).expect("parse counter footer"))
+        .page(PageOptions {
+          width: 400.0,
+          height: 300.0,
+          margin: PageMargins::uniform(24.0),
+        })
+        .fonts(fonts)
+        .build(),
+    )
+  };
+  let latin = {
+    let mut latin = Fonts::default();
+    let data = fs::read(
+      Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf"),
+    )
+    .expect("read latin font");
+
+    latin
+      .register(FontResource::new(data))
+      .expect("load latin font");
+    latin
+  };
+
+  assert!(
+    matches!(paged(&latin), Err(PdfError::UncoveredCharacters(_))),
+    "a chinese counter over a latin face should say what it cannot draw"
+  );
+  // The shared set carries a CJK face alongside the latin one.
+  assert!(paged(&fonts()).is_ok(), "a covered chinese counter renders");
+}
+
+/// The stroking alphas a file sets. Read as numbers because `/CA 0` is a prefix
+/// of `/CA 0.25`.
+fn stroke_alphas(haystack: &str) -> Vec<f32> {
+  haystack
+    .match_indices("/CA ")
+    .filter_map(|(at, marker)| {
+      haystack[at + marker.len()..]
+        .split(|character: char| !matches!(character, '0'..='9' | '.'))
+        .next()?
+        .parse()
+        .ok()
+    })
+    .collect()
+}
+
+/// Registers both test fonts under one family as two `@font-face` rules would: each at the
+/// default `font-weight: normal`, serving only its declared `unicode-range`.
+fn ranged_subset_fonts() -> Fonts {
+  let mut fonts = Fonts::default();
+
+  for (path, range) in [
+    (
+      "tests/fonts/noto-sans-tc-caps.subset.ttf",
+      UnicodeRange::new(0x4E00, 0x9FFF),
+    ),
+    (
+      "../assets/fonts/archivo/Archivo-VariableFont_wdth,wght.ttf",
+      UnicodeRange::new(0x0000, 0x00FF),
+    ),
+  ] {
+    let data = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).expect("read test font");
+
+    fonts
+      .register(
+        FontResource::new(data)
+          .override_info(FontOverride {
+            family_name: Some("Grouped".into()),
+            weight: Some(400.0),
+            ..Default::default()
+          })
+          .unicode_range(UnicodeRangeSet::from_iter([range])),
+      )
+      .expect("load test font");
+  }
+  fonts
+}
+
+/// A subset whose `cmap` reaches past its `unicode-range` must not steal codepoints from the
+/// subset that declares them. The CJK subset also encodes the ASCII space and the capitals, and
+/// registers first, so without the range it takes those and leaves the lowercase to Archivo —
+/// one text object per fragment, each repositioned from scratch. Extractors rebuild words from
+/// glyph geometry, and that is the shape they read wrong.
+#[test]
+fn a_ranged_subset_keeps_a_latin_run_whole() {
+  let fonts = ranged_subset_fonts();
+  let doc = r#"<main style="font-family:Grouped;font-size:16px;">
+    <p>Average App Rating</p>
+  </main>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the ranged family");
+
+  let shows = content_lines(&pdf)
+    .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .count();
+
+  assert_eq!(shows, 1, "the run was split across {shows} text objects");
+}
+
+/// Encoded bitmaps reach the PDF as the bytes they came in as: a JPEG embeds
+/// as a `DCTDecode` stream rather than a re-encode of its pixels.
+#[test]
+fn encoded_bitmaps_embed_their_own_bytes() {
+  const JPEG: &[u8] = include_bytes!("images/checker.jpg");
+  const WEBP: &[u8] = include_bytes!("images/checker.webp");
+
+  let cache = ResourceCache::new(1 << 20);
+  let images: HashMap<Arc<str>, ImageSource> = [("jpeg", JPEG), ("webp", WEBP)]
+    .into_iter()
+    .map(|(name, bytes)| {
+      let source = cache
+        .get_or_decode(bytes, ImageCacheMode::Auto)
+        .expect("decode test image");
+
+      (name.into(), source)
+    })
+    .collect();
+  let source = r##"<div style="display: flex; column-gap: 8px; padding: 8px;">
+      <img src="jpeg" style="width: 32px; height: 32px;" />
+      <img src="webp" style="width: 32px; height: 32px;" />
+    </div>"##;
+  let pdf = run_pdf_fixture("encoded-bitmaps", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the fixture"))
+      .viewport(Viewport::new((120, 48)))
+      .images(images.clone())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Subtype/Image").count(),
+    2,
+    "expected an image XObject per source"
+  );
+  assert!(
+    haystack.contains("/DCTDecode"),
+    "expected the JPEG to embed as a JPEG stream"
+  );
+  assert!(
+    find(&pdf, JPEG).is_some(),
+    "expected the original JPEG bytes in the PDF"
+  );
+}
+
+/// A PNG whose rows carry no alpha needs no decode: its IDAT stream is already
+/// deflate with the PNG predictors, which `/DecodeParms` describes. A paletted
+/// source keeps its palette as an `/Indexed` colour space instead of widening
+/// every pixel to RGB.
+#[test]
+fn opaque_pngs_embed_their_own_streams() {
+  const RGB: &[u8] = include_bytes!("images/checker.png");
+  const INDEXED: &[u8] = include_bytes!("images/checker-indexed.png");
+
+  let cache = ResourceCache::new(1 << 20);
+  let images: HashMap<Arc<str>, ImageSource> = [("rgb", RGB), ("indexed", INDEXED)]
+    .into_iter()
+    .map(|(name, bytes)| {
+      let source = cache
+        .get_or_decode(bytes, ImageCacheMode::Auto)
+        .expect("decode test image");
+
+      (name.into(), source)
+    })
+    .collect();
+  let source = r##"<div style="display: flex; column-gap: 8px; padding: 8px;">
+      <img src="rgb" style="width: 32px; height: 32px;" />
+      <img src="indexed" style="width: 32px; height: 32px;" />
+    </div>"##;
+  let pdf = run_pdf_fixture("png-streams", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(source, FromHtmlOptions::default()).expect("parse the fixture"))
+      .viewport(Viewport::new((120, 48)))
+      .images(images.clone())
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Predictor 15").count(),
+    2,
+    "expected both PNG streams to keep their row predictors"
+  );
+  assert!(
+    haystack.contains("/Indexed"),
+    "expected the paletted PNG to keep its palette"
+  );
+
+  for (name, bytes) in [("rgb", RGB), ("indexed", INDEXED)] {
+    let idat = find(bytes, b"IDAT").expect("an IDAT chunk") + 8;
+    let end = find(bytes, b"IEND").expect("an IEND chunk") - 8;
+
+    assert!(
+      find(&pdf, &bytes[idat..end]).is_some(),
+      "expected the original {name} IDAT bytes in the PDF"
+    );
+  }
+}
+
+/// `/Producer` names takumi and carries the crate version, which tegami keeps
+/// in step with the `takumi-pdf` npm package. The fixture harness pins its own
+/// producer, so this renders outside it.
+#[test]
+fn the_producer_carries_the_crate_version() {
+  let doc = r#"<div style="width: 40px; height: 40px; background: #000;"></div>"#;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((80, 80)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect("render the doc");
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    takumi_pdf::PRODUCER,
+    format!("takumi-pdf {}", env!("CARGO_PKG_VERSION")),
+    "the producer should name takumi and its version"
+  );
+  assert!(
+    haystack.contains(&format!("/Producer({})", takumi_pdf::PRODUCER)),
+    "expected the producer in the info dictionary"
+  );
+  assert!(
+    haystack.contains(&format!("<pdf:Producer>{}", takumi_pdf::PRODUCER)),
+    "expected the producer in the XMP packet"
+  );
+}
+
+/// `blur()` has no PDF equivalent. Dropping it would print a page that quietly
+/// disagrees with the stylesheet, so the render stops and names the function.
+#[test]
+fn an_unsupported_filter_stops_the_render() {
+  let doc =
+    r#"<div style="filter: blur(4px); width: 40px; height: 40px; background: #000;"></div>"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((80, 80)))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("blur() should stop the render");
+
+  assert!(
+    matches!(&error, PdfError::UnsupportedFilter(filter) if filter == "blur(4px)"),
+    "unexpected error: {error:?}"
+  );
+}
+
+/// An image whose bytes will not decode leaves a hole where the page expects a
+/// picture. The render stops and names the source.
+#[test]
+fn an_undecodable_image_stops_the_render() {
+  let mut bytes = ImageBuffer::from_rgba_bytes(vec![255; 8 * 8 * 4], 8, 8)
+    .expect("an 8x8 buffer")
+    .encode_png()
+    .expect("encode the png");
+  // The IHDR still reports 8x8; the compressed pixels no longer inflate.
+  let idat = find(&bytes, b"IDAT").expect("an IDAT chunk") + 8;
+
+  bytes[idat..].fill(0);
+
+  let cache = ResourceCache::new(1 << 20);
+  let source = cache
+    .get_or_decode(&bytes, ImageCacheMode::Auto)
+    .expect("the png header still parses");
+  let doc = r#"<img src="broken" style="filter: grayscale(1); width: 32px; height: 32px;" />"#;
+  let error = render(
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .viewport(Viewport::new((48, 48)))
+      .images(HashMap::from([("broken".into(), source)]))
+      .fonts(&fonts())
+      .build(),
+  )
+  .expect_err("a broken image should stop the render");
+
+  assert!(
+    matches!(&error, PdfError::UndrawableImage(reason) if reason.starts_with("broken:")),
+    "unexpected error: {error:?}"
+  );
+}
+
+/// A `fixed` box repeats on every page, so the page counters it holds count.
+/// The box is the document's only text, which leaves the counters as the only
+/// text operations the pages show.
+#[test]
+fn a_fixed_box_fills_its_page_counters() {
+  let doc = r#"<main>
+      <div style="position: fixed; bottom: 10px; left: 10px; display: flex; column-gap: 4px; font-size: 12px;">
+        <span class="pageNumber"></span><span class="totalPages"></span>
+      </div>
+      <p style="height: 900px;"></p>
+      <p style="height: 900px;"></p>
+    </main>"#;
+  let pdf = run_pdf_fixture("fixed-page-counters", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .fonts(fonts)
+      .build()
+  });
+  let shown: Vec<Vec<u8>> = content_lines(&pdf)
+    .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .collect();
+
+  assert_eq!(
+    inflated_text(&pdf).matches("/Count 2").count(),
+    1,
+    "expected a two-page document"
+  );
+  assert_eq!(
+    shown.len(),
+    4,
+    "expected both counters on both pages and nothing else"
+  );
+  assert_ne!(
+    shown[0], shown[2],
+    "expected the page number to change between pages"
+  );
+  // The page number before it may be a fraction of a pixel wider on one page, which moves it.
+  let text = |line: &[u8]| {
+    let at = line
+      .windows(2)
+      .rposition(|window| window == b"Tm")
+      .map_or(0, |at| at + 2);
+
+    line[at..].to_vec()
+  };
+
+  assert_eq!(
+    text(&shown[1]),
+    text(&shown[3]),
+    "expected the total to stay the same on both pages"
+  );
+}
+
+/// A page counter in the content names the page it lands on, which has to
+/// render the document that carries the number written by hand.
+#[test]
+fn a_page_counter_in_the_content_names_its_own_page() {
+  let document = |page: &str, total: &str| {
+    format!(
+      r#"<main>
+        <p style="height: 1100px;"></p>
+        <p style="font-size: 12px;">page {page} of {total}</p>
+      </main>"#
+    )
+  };
+  let hooked = document(
+    r#"<span class="pageNumber"></span>"#,
+    r#"<span class="totalPages"></span>"#,
+  );
+  let pdf = run_pdf_fixture("content-page-counters", |fonts| a4_options(&hooked, fonts));
+  let numbered = document("<span>2</span>", "<span>2</span>");
+  let expected = render_pinned(a4_options(&numbered, &fonts()));
+
+  assert_eq!(
+    pdf, expected,
+    "content counters did not resolve to page 2 of 2"
+  );
+}
+
+/// A `fixed` box the initial containing block holds repeats on every page, laid
+/// out against the page area rather than the content column: a watermark, which
+/// is what the property is for in print. Tagging is on, so the run also covers
+/// a repeated link against the tag tree, which only knows the content.
+#[test]
+fn a_fixed_box_repeats_on_every_page() {
+  let doc = r#"<main>
+      <div style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 48px;">DRAFT</span>
+      </div>
+      <div style="position: fixed; top: 20px; left: 30px; width: 40px; height: 40px; background: #000;"></div>
+      <a href="https://takumi.kane.tw" style="position: fixed; bottom: 10px; left: 10px;">source</a>
+      <div style="position: fixed; top: 200px; left: 200px; width: 50px; height: 50px; z-index: -1; background: #eee;"></div>
+      <p style="height: 900px;">first</p>
+      <p style="height: 900px;">second</p>
+    </main>"#;
+  let pdf = run_pdf_fixture("fixed-repeats-per-page", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .tagged(Tagging::On)
+      .fonts(fonts)
+      .build()
+  });
+  let haystack = inflated_text(&pdf);
+
+  assert_eq!(
+    haystack.matches("/Count 2").count(),
+    1,
+    "expected a two-page document"
+  );
+  assert_eq!(
+    content_lines(&pdf)
+      .filter(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+      .count(),
+    6,
+    "expected both fixed boxes on both pages, next to each page's own text"
+  );
+  assert_eq!(
+    haystack.matches("/Subtype/Link").count(),
+    2,
+    "expected the fixed link to be clickable on both pages"
+  );
+
+  // Every fixed box paints under one page-space transform, so the operands are
+  // page-area pixels: the corner box at its own insets, the watermark centered.
+  let corners: Vec<[f32; 4]> = content_lines(&pdf)
+    .filter_map(|line| operands(&line, "re"))
+    .filter(|rect| rect.len() == 4)
+    .map(|rect| [rect[0], rect[1], rect[2], rect[3]])
+    .filter(|rect| rect[2] == 40.0 && rect[3] == 40.0)
+    .collect();
+
+  assert_eq!(
+    corners,
+    [[30.0, 20.0, 40.0, 40.0]; 2],
+    "expected the offset box at its own insets on both pages"
+  );
+
+  let lines: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let under = lines
+    .iter()
+    .position(|line| find(line, b"200 200 50 50 re").is_some())
+    .expect("the z-index: -1 box");
+  let first_text = lines
+    .iter()
+    .position(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .expect("some text");
+
+  assert!(
+    under < first_text,
+    "expected a negative z-index box to paint under the content"
+  );
+
+  let watermarks: Vec<(f32, f32)> = content_lines(&pdf)
+    .filter(|line| find(line, b"/f0 48 Tf").is_some())
+    .filter_map(|line| operands(&line, "Tm"))
+    .filter(|matrix| matrix.len() == 6)
+    .map(|matrix| (matrix[4], matrix[5]))
+    .collect();
+
+  assert_eq!(watermarks.len(), 2, "expected a watermark on both pages");
+  assert_eq!(
+    watermarks[0], watermarks[1],
+    "expected the watermark at the same place on both pages"
+  );
+
+  let (_, baseline) = watermarks[0];
+  let footer = content_lines(&pdf)
+    .filter_map(|line| operands(&line, "Tm"))
+    .filter(|matrix| matrix.len() == 6)
+    .map(|matrix| matrix[5])
+    .fold(0.0_f32, f32::max);
+
+  assert!(
+    baseline > 100.0 && baseline < footer - 100.0,
+    "expected the watermark centered in the page area, not pinned to an edge: {baseline} of {footer}"
+  );
+}
+
+/// The numbers preceding a content-stream operator, as the operator's operands.
+fn operands(line: &[u8], operator: &str) -> Option<Vec<f32>> {
+  let text = std::str::from_utf8(line).ok()?;
+  let (before, _) = text.rsplit_once(&format!(" {operator}"))?;
+
+  Some(
+    before
+      .split_whitespace()
+      .rev()
+      .map_while(|token| token.parse::<f32>().ok())
+      .collect::<Vec<_>>()
+      .into_iter()
+      .rev()
+      .collect(),
+  )
+}
+
+/// The paper sits under everything, including a box the content would
+/// otherwise cover: paper, then the negative `z-index` watermark, then the
+/// text.
+#[test]
+fn the_paper_paints_under_a_repeated_box() {
+  let doc = r#"<main>
+      <div style="position: fixed; top: 100px; left: 100px; width: 60px; height: 60px; z-index: -1; background: #123456;"></div>
+      <p style="height: 900px;">first</p>
+      <p style="height: 900px;">second</p>
+    </main>"#;
+  let pdf = run_pdf_fixture("page-background", |fonts| {
+    PdfOptions::builder()
+      .node(from_html(doc, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions::A4)
+      .background_color(Color([239, 231, 213, 255]))
+      .fonts(fonts)
+      .build()
+  });
+  let lines: Vec<Vec<u8>> = content_lines(&pdf).collect();
+  let paper = lines
+    .iter()
+    .position(|line| find(line, b"0.9373 0.9059 0.8353 rg").is_some())
+    .expect("the paper fill");
+  let watermark = lines
+    .iter()
+    .position(|line| find(line, b"100 100 60 60 re").is_some())
+    .expect("the repeated box");
+  let text = lines
+    .iter()
+    .position(|line| line.ends_with(b"TJ") || line.ends_with(b"Tj"))
+    .expect("some text");
+
+  assert!(
+    paper < watermark && watermark < text,
+    "expected paper, then the box, then the text: {paper} {watermark} {text}"
+  );
+}
+
+/// A scaled overflow clip narrows nothing it does not cover on the page, so what it shows stays.
+#[test]
+fn scaled_overflow_clip_keeps_what_it_shows() {
+  let fonts = fonts();
+  let html = r##"<div style="display: block; width: 100px; height: 40px; overflow: hidden; transform: scale(2); transform-origin: 0 0"><div style="display: block; height: 30px"></div><div style="display: block; height: 10px; background-color: #123456"></div></div>"##;
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(html, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        width: 300.0,
+        height: 200.0,
+        margin: PageMargins::uniform(10.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+
+  assert!(
+    inflated_text(&pdf).contains("0.0706 0.2039 0.3373 rg"),
+    "the fill the scaled clip shows is missing"
+  );
+}
+
+/// A badge fragment lands in one page's content stream, the page that owns
+/// its line, not re-clipped into every page's.
+#[test]
+fn paged_inline_span_background_paints_once() {
+  let fonts = fonts();
+  // One paragraph spanning several pages, so its node survives the per-page
+  // bounds pruning and the fragment loop itself must skip foreign pages.
+  let words: String =
+    "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod ".repeat(30);
+  let html = format!(
+    r##"<p style="margin: 0; font-size: 16px; color: #141414">{words}<span style="background-color: #fee2e2; padding: 2px 8px; border-radius: 9999px">soon</span> {words}</p>"##
+  );
+  let pdf = render(
+    PdfOptions::builder()
+      .node(from_html(&html, FromHtmlOptions::default()).expect("parse the doc"))
+      .page(PageOptions {
+        width: 400.0,
+        height: 300.0,
+        margin: PageMargins::uniform(24.0),
+      })
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("render the doc");
+  let haystack = inflated_text(&pdf);
+  let pages = page_count(&pdf);
+
+  assert!(pages > 1, "the document did not paginate");
+  assert_eq!(
+    haystack.matches("0.9961 0.8863 0.8863 rg").count(),
+    1,
+    "the badge fill must be emitted once, on its owning page"
+  );
+}
+
+fn page_sized_boxes<'g>(fonts: &'g Fonts, page: PageOptions, height: &str) -> PdfOptions<'g> {
+  let html = format!(
+    r#"<div style="background: #e2e8f0; height: {height}"></div>
+       <div style="background: #cbd5e1; height: {height}"></div>
+       <div style="background: #94a3b8; height: {height}"></div>"#
+  );
+
+  PdfOptions::builder()
+    .node(from_html(&html, FromHtmlOptions::default()).expect("parse boxes"))
+    .page(page)
+    .fonts(fonts)
+    .build()
+}
+
+/// A box exactly as tall as the content window fills one page and no more,
+/// even when layout snaps its edges to whole pixels and the window is
+/// fractional (A4 is 1122.52px tall).
+#[test]
+fn a_box_as_tall_as_the_window_fills_exactly_one_page() {
+  let fonts = fonts();
+  let small = PageOptions {
+    width: 300.0,
+    height: 160.0,
+    margin: PageMargins::uniform(20.0),
+  };
+  let a4 = PageOptions {
+    margin: PageMargins::uniform(0.0),
+    ..PageOptions::A4
+  };
+
+  assert_eq!(
+    page_count(&render_pinned(page_sized_boxes(&fonts, small, "120px"))),
+    3,
+    "integer window"
+  );
+  assert_eq!(
+    page_count(&run_pdf_fixture_with("page-sized-boxes", &fonts, |fonts| {
+      page_sized_boxes(fonts, a4, "297mm")
+    })),
+    3,
+    "a4 in mm"
+  );
+  assert_eq!(
+    page_count(&render_pinned(page_sized_boxes(&fonts, a4, "1122.52px"))),
+    3,
+    "a4 in rounded px"
+  );
+}
+
+/// Viewport units in paged content resolve against the page area, as in
+/// print media, although the column lays out at unbounded height.
+#[test]
+fn viewport_units_in_paged_content_take_the_page_area() {
+  let fonts = fonts();
+  let a4 = PageOptions {
+    margin: PageMargins::uniform(0.0),
+    ..PageOptions::A4
+  };
+
+  assert_eq!(
+    page_count(&run_pdf_fixture_with(
+      "page-area-viewport-units",
+      &fonts,
+      |fonts| { page_sized_boxes(fonts, a4, "100vh") }
+    )),
+    3
+  );
+  let column = PdfOptions::builder()
+    .node(
+      from_html(
+        r#"<div style="width: 50vw; height: 50vh; background: #e2e8f0"></div>
+           <div style="width: 100vw; height: 50vmin; background: #cbd5e1"></div>
+           <div style="height: 40vmax; background: #94a3b8"></div>"#,
+        FromHtmlOptions::default(),
+      )
+      .expect("parse viewport unit boxes"),
+    )
+    .page(PageOptions {
+      width: 300.0,
+      height: 160.0,
+      margin: PageMargins::uniform(20.0),
+    })
+    .fonts(&fonts)
+    .build();
+
+  assert_eq!(
+    page_count(&render_pinned(column)),
+    2,
+    "50vh + 50vmin + 40vmax = 60 + 60 + 104 in a 120 window"
+  );
+}
+
+fn page_rule_options<'g>(fonts: &'g Fonts, pages: PageRules) -> PdfOptions<'g> {
+  let filler: String = (1..=40)
+    .map(|line| format!("<p style=\"margin: 0\">line {line}</p>"))
+    .collect();
+  let html = format!(r#"<div style="font-size: 12px; color: #141414">{filler}</div>"#);
+
+  PdfOptions::builder()
+    .node(from_html(&html, FromHtmlOptions::default()).expect("parse filler"))
+    .page(PageOptions {
+      width: 300.0,
+      height: 200.0,
+      margin: PageMargins::AUTO,
+    })
+    .header(text("Running header", 10.0))
+    .footer(text("Page footer", 10.0))
+    .pages(pages)
+    .fonts(fonts)
+    .build()
+}
+
+/// Page rules: the header stays off the first page, the last page swaps
+/// in a taller closing footer, and the automatic margin fits the tallest band
+/// on every page, so the pages break where they would with that footer on
+/// every page.
+#[test]
+fn page_rules_override_the_bands_per_page() {
+  let fonts = fonts();
+  let closing = || {
+    column(vec![
+      text("Thank you for your business.", 12.0),
+      text("Terms: net 30.", 12.0),
+    ])
+  };
+  let pdf = run_pdf_fixture_with("page-rules", &fonts, |fonts| {
+    page_rule_options(
+      fonts,
+      PageRules {
+        first: PageOverride {
+          header: Some(Band::Off),
+          ..PageOverride::default()
+        },
+        last: PageOverride {
+          footer: Some(closing().into()),
+          ..PageOverride::default()
+        },
+        ..PageRules::default()
+      },
+    )
+  });
+  let closing_everywhere = render_pinned(page_rule_options(
+    &fonts,
+    PageRules {
+      odd: PageOverride {
+        footer: Some(closing().into()),
+        ..PageOverride::default()
+      },
+      even: PageOverride {
+        footer: Some(closing().into()),
+        ..PageOverride::default()
+      },
+      ..PageRules::default()
+    },
+  ));
+
+  assert!(page_count(&pdf) > 2);
+  assert_eq!(page_count(&pdf), page_count(&closing_everywhere));
+}
+
+/// Each field falls through `first`, `last`, the page's parity, then the
+/// document's own setting, and `Band::Off` stops the fall.
+#[test]
+fn page_rules_pick_first_then_last_then_parity_then_the_document() {
+  let node = |name: &str| text(name, 10.0);
+  let variants = PageRules {
+    first: PageOverride {
+      header: Some(node("first").into()),
+      ..PageOverride::default()
+    },
+    last: PageOverride {
+      header: Some(Band::Off),
+      footer: Some(node("last footer").into()),
+    },
+    odd: PageOverride {
+      header: Some(node("odd").into()),
+      ..PageOverride::default()
+    },
+    even: PageOverride::default(),
+  };
+  let header = variants
+    .header_band(Some(&node("document")))
+    .expect("a header");
+  let footer = variants.footer_band(None).expect("a footer");
+  let name = |band: &PageBand, page: usize, pages: usize| {
+    band.for_page(page, pages).map(|node| match &node.kind {
+      NodeKind::Text(data) => data.text.clone(),
+      _ => String::new(),
+    })
+  };
+
+  assert_eq!(name(&header, 1, 1).as_deref(), Some("first"));
+  assert_eq!(name(&header, 1, 4).as_deref(), Some("first"));
+  assert_eq!(name(&header, 2, 4).as_deref(), Some("document"));
+  assert_eq!(name(&header, 3, 4).as_deref(), Some("odd"));
+  assert_eq!(name(&header, 4, 4), None);
+  assert_eq!(name(&footer, 3, 4), None);
+  assert_eq!(name(&footer, 4, 4).as_deref(), Some("last footer"));
+  assert!(PageRules::default().footer_band(None).is_none());
+}
+
+/// A table taller than one layout grid keeps every row below the one before
+/// it, and every row in the structure tree.
+#[test]
+fn a_table_taller_than_one_grid_keeps_every_row() {
+  const ROWS: usize = 10_050;
+
+  let doc = format!(
+    r#"<table style="table-layout:fixed;width:100px;border-spacing:0">
+      <thead><tr><th style="height:4px;padding:0"></th></tr></thead>
+      <tbody>{}</tbody>
+    </table>"#,
+    r#"<tr><td style="height:4px;padding:0"></td></tr>"#.repeat(ROWS)
+  );
+  let node = || from_html(&doc, FromHtmlOptions::default()).expect("parse table");
+  let fonts = fonts();
+  let size = measure(
+    MeasureOptions::builder()
+      .node(node())
+      .viewport(Viewport::new((100, 100)))
+      .fonts(&fonts)
+      .build(),
+  )
+  .expect("measure table");
+
+  assert_eq!(size.height, (ROWS + 1) as f32 * 4.0);
+
+  let pdf = render_pinned(
+    PdfOptions::builder()
+      .node(node())
+      .page(PageOptions::A4)
+      .fonts(&fonts)
+      .build(),
+  );
+
+  assert_eq!(inflated_text(&pdf).matches("/S/TR").count(), ROWS + 1);
+}

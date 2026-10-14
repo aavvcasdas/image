@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>奶油编辑卡模板</title>
+  <style>
+    :root {
+      --cream: #fff8ec;
+      --panel: #fffdfa;
+      --ink: #141414;
+      --red: #f23f36;
+      --yellow: #ffd75a;
+      --blue: #5da8ff;
+      --orange: #ffb83f;
+      --muted: #6f675e;
+      --rule: #d9cbb7;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #c9c3ba; }
+    body {
+      display: grid;
+      gap: 32px;
+      padding: 32px;
+      justify-content: center;
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 1080px;
+      height: 1440px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 88% 6%, rgba(255,215,90,.35), transparent 24%),
+        var(--cream);
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 35px;
+      border: 2px solid var(--ink);
+      border-radius: 31px;
+      pointer-events: none;
+    }
+
+    .content {
+      position: absolute;
+      inset: 72px 70px 112px;
+      display: flex;
+      flex-direction: column;
+    }
+    .pill {
+      align-self: flex-start;
+      padding: 11px 24px 12px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      box-shadow: 7px 7px 0 var(--ink);
+      color: white;
+      background: var(--red);
+      font-size: 27px;
+      line-height: 1;
+      font-weight: 850;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .cover-title {
+      margin-top: 58px;
+      max-width: 900px;
+      font-size: 82px;
+      line-height: 1.1;
+      letter-spacing: -.04em;
+      font-weight: 950;
+    }
+    .lead {
+      margin-top: 22px;
+      max-width: 900px;
+      font-size: 30px;
+      line-height: 1.5;
+      font-weight: 720;
+    }
+    .visual-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 48px;
+      padding: 30px;
+      border: 3px solid var(--ink);
+      border-radius: 28px;
+      box-shadow: 13px 13px 0 var(--ink);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+    }
+    .visual-label { font-size: 28px; font-weight: 900; }
+    .tier-list {
+      flex: 1;
+      min-height: 0;
+      margin-top: 22px;
+      border: 2px solid var(--ink);
+      border-radius: 18px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+    }
+    .tier {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      border-top: 2px solid var(--ink);
+    }
+    .tier:first-child { border-top: 0; }
+    .tier-name {
+      display: flex;
+      align-items: center;
+      padding: 0 22px;
+      border-right: 2px solid var(--ink);
+      font-size: 28px;
+      font-weight: 900;
+    }
+    .tier:nth-child(1) .tier-name { background: #f34a3f; }
+    .tier:nth-child(2) .tier-name { background: var(--orange); }
+    .tier:nth-child(3) .tier-name { background: var(--yellow); }
+    .tier:nth-child(4) .tier-name { background: #f8efd9; }
+    .tier-copy {
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      background: #eeeae2;
+      font-size: 24px;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+
+    .page-title {
+      margin-top: 54px;
+      max-width: 900px;
+      font-size: 72px;
+      line-height: 1.12;
+      letter-spacing: -.04em;
+      font-weight: 950;
+    }
+    .info-list {
+      flex: 1;
+      min-height: 0;
+      margin-top: 42px;
+      display: grid;
+      gap: 24px;
+    }
+    .info-card {
+      position: relative;
+      padding: 30px 32px;
+      border: 3px solid var(--ink);
+      border-radius: 26px;
+      box-shadow: 11px 11px 0 var(--ink);
+      background: var(--panel);
+    }
+    .info-head {
+      display: grid;
+      grid-template-columns: 13px 1fr auto;
+      gap: 22px;
+      align-items: center;
+    }
+    .bar { width: 13px; height: 74px; border-radius: 8px; background: var(--blue); }
+    .info-card:nth-child(2) .bar { background: var(--orange); }
+    .info-card:nth-child(3) .bar { background: var(--red); }
+    .info-card h3 { font-size: 38px; line-height: 1.15; }
+    .badge {
+      padding: 8px 17px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: var(--yellow);
+      font-size: 22px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+    .judgement {
+      margin-top: 18px;
+      font-size: 27px;
+      line-height: 1.48;
+      font-weight: 760;
+    }
+    .meta-line {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 2px solid var(--rule);
+      color: var(--muted);
+      font-size: 21px;
+      line-height: 1.35;
+    }
+    .footer {
+      position: absolute;
+      left: 70px;
+      right: 70px;
+      bottom: 51px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    /* 03 步骤时间线 */
+    .timeline {
+      flex: 1;
+      min-height: 0;
+      margin-top: 38px;
+      display: grid;
+      gap: 18px;
+    }
+    .timeline-step {
+      display: grid;
+      grid-template-columns: 94px 1fr auto;
+      gap: 22px;
+      align-items: center;
+      padding: 24px 28px;
+      border: 3px solid var(--ink);
+      border-radius: 24px;
+      box-shadow: 9px 9px 0 var(--ink);
+      background: var(--panel);
+    }
+    .step-number {
+      width: 70px;
+      height: 70px;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      background: var(--yellow);
+      font-size: 29px;
+      font-weight: 950;
+    }
+    .timeline-step:nth-child(2) .step-number { background: #b9dcff; }
+    .timeline-step:nth-child(3) .step-number { background: #ffc26e; }
+    .timeline-step:nth-child(4) .step-number { background: #ff8c84; }
+    .timeline-copy h3 { font-size: 32px; margin-bottom: 7px; }
+    .timeline-copy p { color: var(--muted); font-size: 23px; line-height: 1.4; }
+    .step-tag {
+      padding: 7px 13px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      font-size: 18px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    /* 04 排名分级 */
+    .ranking-board {
+      flex: 1;
+      min-height: 0;
+      margin-top: 40px;
+      padding: 26px;
+      border: 3px solid var(--ink);
+      border-radius: 27px;
+      box-shadow: 12px 12px 0 var(--ink);
+      background: var(--panel);
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+    }
+    .rank-row {
+      display: grid;
+      grid-template-columns: 145px 1fr auto;
+      align-items: center;
+      border-top: 2px solid var(--ink);
+    }
+    .rank-row:first-child { border-top: 0; }
+    .rank-label {
+      align-self: stretch;
+      display: grid;
+      place-items: center;
+      border-right: 2px solid var(--ink);
+      font-size: 31px;
+      font-weight: 950;
+      background: #f34a3f;
+    }
+    .rank-row:nth-child(2) .rank-label { background: var(--orange); }
+    .rank-row:nth-child(3) .rank-label { background: var(--yellow); }
+    .rank-row:nth-child(4) .rank-label { background: #f7ecd3; }
+    .rank-copy { padding: 18px 24px; }
+    .rank-copy h3 { font-size: 29px; margin-bottom: 7px; }
+    .rank-copy p { color: var(--muted); font-size: 21px; line-height: 1.35; }
+    .rank-score {
+      margin-right: 20px;
+      padding: 8px 15px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: white;
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    /* 05 截图案例 */
+    .screenshot-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 36px;
+      border: 3px solid var(--ink);
+      border-radius: 27px;
+      box-shadow: 12px 12px 0 var(--ink);
+      background: var(--panel);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .browser-bar {
+      height: 64px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 3px solid var(--ink);
+      background: #efe7da;
+    }
+    .browser-dot { width: 14px; height: 14px; border: 2px solid var(--ink); border-radius: 50%; }
+    .browser-address {
+      flex: 1;
+      margin-left: 12px;
+      padding: 7px 14px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+      font: 17px Consolas, monospace;
+    }
+    .screen-content {
+      flex: 1;
+      min-height: 0;
+      padding: 30px;
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 24px;
+      background: #f4f1eb;
+    }
+    .screen-sidebar { border: 2px solid var(--ink); border-radius: 18px; padding: 18px; background: white; }
+    .screen-sidebar span { display: block; height: 16px; margin: 16px 0; border-radius: 8px; background: #d8d1c7; }
+    .screen-sidebar span:first-child { background: var(--red); }
+    .screen-main { display: grid; grid-template-rows: 110px 1fr; gap: 20px; }
+    .screen-header { border: 2px solid var(--ink); border-radius: 18px; background: white; padding: 22px; }
+    .screen-header strong { font-size: 26px; }
+    .screen-header p { margin-top: 9px; color: var(--muted); font-size: 19px; }
+    .screen-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .screen-card { border: 2px solid var(--ink); border-radius: 18px; background: white; padding: 20px; }
+    .screen-card i { display: block; width: 58px; height: 58px; margin-bottom: 18px; border: 2px solid var(--ink); border-radius: 14px; background: var(--yellow); }
+    .screen-card:nth-child(2) i { background: var(--blue); }
+    .screen-card:nth-child(3) i { background: var(--orange); }
+    .screen-card:nth-child(4) i { background: var(--red); }
+    .screen-card strong { font-size: 23px; }
+    .case-notes { margin-top: 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .case-note { padding: 18px 20px; border: 2px solid var(--ink); border-radius: 18px; background: white; font-size: 21px; line-height: 1.35; font-weight: 750; }
+    .case-note span { color: var(--red); }
+
+    /* 06 清单总结 */
+    .checklist-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 38px;
+      padding: 26px 30px;
+      border: 3px solid var(--ink);
+      border-radius: 28px;
+      box-shadow: 12px 12px 0 var(--ink);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+    }
+    .check-row {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 58px 1fr auto;
+      gap: 20px;
+      align-items: center;
+      border-top: 2px solid var(--rule);
+    }
+    .check-row:first-child { border-top: 0; }
+    .check-box {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--ink);
+      border-radius: 10px;
+      background: var(--yellow);
+      font-size: 25px;
+      font-weight: 950;
+    }
+    .check-copy h3 { font-size: 29px; margin-bottom: 5px; }
+    .check-copy p { color: var(--muted); font-size: 20px; line-height: 1.35; }
+    .check-state { color: var(--red); font: 18px Consolas, monospace; }
+    .summary-banner {
+      margin-top: 26px;
+      padding: 23px 28px;
+      border: 3px solid var(--ink);
+      border-radius: 22px;
+      background: var(--yellow);
+      font-size: 28px;
+      line-height: 1.35;
+      font-weight: 900;
+      text-align: center;
+    }
+    [contenteditable="true"]:focus { outline: 3px dashed var(--red); outline-offset: 4px; }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <main class="content" data-card-content contenteditable="true">
+      <div class="pill">[分类标签]</div>
+      <h1 class="cover-title">[用 2–3 行写清楚核心主题]</h1>
+      <p class="lead">[一句话说明材料对象、读者收益或必要限制。]</p>
+      <div class="visual-panel" data-content-end>
+        <div class="visual-label">[主视觉或结构化信息标题]</div>
+        <div class="tier-list">
+          <div class="tier"><div class="tier-name">重点</div><div class="tier-copy">[最重要的一组内容]</div></div>
+          <div class="tier"><div class="tier-name">推荐</div><div class="tier-copy">[第二组内容或对象]</div></div>
+          <div class="tier"><div class="tier-name">适用</div><div class="tier-copy">[适用场景、对象或条件]</div></div>
+          <div class="tier"><div class="tier-name">注意</div><div class="tier-copy">[限制、例外或补充说明]</div></div>
+        </div>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer><span>[系列 / 主题路径]</span><span>01 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content contenteditable="true">
+      <div class="pill">[页面分类]</div>
+      <h2 class="page-title">[比较、清单或步骤标题]</h2>
+      <div class="info-list" data-content-end>
+        <article class="info-card">
+          <div class="info-head"><span class="bar"></span><h3>[信息对象一]</h3><span class="badge">[数据]</span></div>
+          <p class="judgement">[完整写出主要判断、特点或步骤说明。]</p>
+          <p class="meta-line">[链接、来源、限制或辅助元数据]</p>
+        </article>
+        <article class="info-card">
+          <div class="info-head"><span class="bar"></span><h3>[信息对象二]</h3><span class="badge">[数据]</span></div>
+          <p class="judgement">[使用与上一张卡一致的字段和信息顺序。]</p>
+          <p class="meta-line">[链接、来源、限制或辅助元数据]</p>
+        </article>
+        <article class="info-card">
+          <div class="info-head"><span class="bar"></span><h3>[信息对象三]</h3><span class="badge">[数据]</span></div>
+          <p class="judgement">[模块数量由真实内容决定，可以增减。]</p>
+          <p class="meta-line">[链接、来源、限制或辅助元数据]</p>
+        </article>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer><span>[系列 / 主题路径]</span><span>02 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content contenteditable="true">
+      <div class="pill">[步骤 / 教程]</div>
+      <h2 class="page-title">[4 步完成一个具体任务]</h2>
+      <div class="timeline" data-content-end>
+        <article class="timeline-step"><span class="step-number">01</span><div class="timeline-copy"><h3>[准备材料]</h3><p>[说明输入、账号、工具或其他前置条件。]</p></div><span class="step-tag">PREPARE</span></article>
+        <article class="timeline-step"><span class="step-number">02</span><div class="timeline-copy"><h3>[完成设置]</h3><p>[保留参数、凭据名称和操作对象。]</p></div><span class="step-tag">CONFIG</span></article>
+        <article class="timeline-step"><span class="step-number">03</span><div class="timeline-copy"><h3>[执行操作]</h3><p>[明确动作、顺序和预期结果。]</p></div><span class="step-tag">RUN</span></article>
+        <article class="timeline-step"><span class="step-number">04</span><div class="timeline-copy"><h3>[检查结果]</h3><p>[说明验证方式、限制和下一步。]</p></div><span class="step-tag">CHECK</span></article>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer><span>[系列 / 教程路径]</span><span>03 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content contenteditable="true">
+      <div class="pill">[排名 / 分级]</div>
+      <h2 class="page-title">[对象排名与推荐等级]</h2>
+      <p class="lead">[一句话说明排名口径、适用范围或数据来源。]</p>
+      <div class="ranking-board" data-content-end>
+        <div class="rank-row"><div class="rank-label">首选</div><div class="rank-copy"><h3>[对象或方案 A]</h3><p>[最突出优势与适用场景]</p></div><span class="rank-score">9.5</span></div>
+        <div class="rank-row"><div class="rank-label">推荐</div><div class="rank-copy"><h3>[对象或方案 B]</h3><p>[优势、限制与推荐条件]</p></div><span class="rank-score">8.7</span></div>
+        <div class="rank-row"><div class="rank-label">可选</div><div class="rank-copy"><h3>[对象或方案 C]</h3><p>[适用对象和使用门槛]</p></div><span class="rank-score">7.4</span></div>
+        <div class="rank-row"><div class="rank-label">谨慎</div><div class="rank-copy"><h3>[对象或方案 D]</h3><p>[明确风险、例外或不适用场景]</p></div><span class="rank-score">6.0</span></div>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer><span>[系列 / 测评路径]</span><span>04 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content contenteditable="true">
+      <div class="pill">[截图 / 案例]</div>
+      <h2 class="page-title">[真实界面与案例解析]</h2>
+      <div class="screenshot-panel">
+        <div class="browser-bar"><i class="browser-dot"></i><i class="browser-dot"></i><i class="browser-dot"></i><div class="browser-address">example.local / product</div></div>
+        <div class="screen-content"><aside class="screen-sidebar"><span></span><span></span><span></span><span></span><span></span></aside><div class="screen-main"><div class="screen-header"><strong>[界面标题]</strong><p>[一句话说明当前页面状态]</p></div><div class="screen-cards"><div class="screen-card"><i></i><strong>[模块 A]</strong></div><div class="screen-card"><i></i><strong>[模块 B]</strong></div><div class="screen-card"><i></i><strong>[模块 C]</strong></div><div class="screen-card"><i></i><strong>[模块 D]</strong></div></div></div></div>
+      </div>
+      <div class="case-notes" data-content-end><div class="case-note"><span>01</span> [指出截图中的关键操作或优势]</div><div class="case-note"><span>02</span> [说明限制、结果或注意事项]</div></div>
+    </main>
+    <footer class="footer" data-card-footer><span>[系列 / 案例路径]</span><span>05 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content contenteditable="true">
+      <div class="pill">[清单 / 总结]</div>
+      <h2 class="page-title">[发布前最后检查]</h2>
+      <div class="checklist-panel">
+        <div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>[关键信息完整]</h3><p>[事实、数字、单位和链接没有遗漏。]</p></div><span class="check-state">DONE</span></div>
+        <div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>[关系表达正确]</h3><p>[顺序、比较和因果没有被视觉误导。]</p></div><span class="check-state">DONE</span></div>
+        <div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>[手机端可读]</h3><p>[标题、正文和注释字号清楚。]</p></div><span class="check-state">DONE</span></div>
+        <div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>[版面通过检查]</h3><p>[没有裁切、重叠、溢出和异常空白。]</p></div><span class="check-state">DONE</span></div>
+        <div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>[行动建议明确]</h3><p>[读者知道结论、限制与下一步。]</p></div><span class="check-state">DONE</span></div>
+      </div>
+      <div class="summary-banner" data-content-end>[一句话总结整套内容，并给出下一步行动]</div>
+    </main>
+    <footer class="footer" data-card-footer><span>[系列 / 总结路径]</span><span>06 / 06</span></footer>
+  </section>
+</body>
+</html>

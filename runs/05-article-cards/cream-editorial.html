@@ -1,0 +1,432 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>奶油编辑卡模板</title>
+  <style>
+    :root {
+      --cream: #fff8ec;
+      --panel: #fffdfa;
+      --ink: #141414;
+      --red: #f23f36;
+      --yellow: #ffd75a;
+      --blue: #5da8ff;
+      --orange: #ffb83f;
+      --muted: #6f675e;
+      --rule: #d9cbb7;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #c9c3ba; }
+    body {
+      display: grid;
+      gap: 32px;
+      padding: 32px;
+      justify-content: center;
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 1080px;
+      height: 1440px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 88% 6%, rgba(255,215,90,.35), transparent 24%),
+        var(--cream);
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 35px;
+      border: 2px solid var(--ink);
+      border-radius: 31px;
+      pointer-events: none;
+    }
+
+    .content {
+      position: absolute;
+      inset: 72px 70px 112px;
+      display: flex;
+      flex-direction: column;
+    }
+    .pill {
+      align-self: flex-start;
+      padding: 11px 24px 12px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      box-shadow: 7px 7px 0 var(--ink);
+      color: white;
+      background: var(--red);
+      font-size: 27px;
+      line-height: 1;
+      font-weight: 850;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .cover-title {
+      margin-top: 58px;
+      max-width: 900px;
+      font-size: 82px;
+      line-height: 1.1;
+      letter-spacing: -.04em;
+      font-weight: 950;
+    }
+    .lead {
+      margin-top: 22px;
+      max-width: 900px;
+      font-size: 30px;
+      line-height: 1.5;
+      font-weight: 720;
+    }
+    .visual-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 48px;
+      padding: 30px;
+      border: 3px solid var(--ink);
+      border-radius: 28px;
+      box-shadow: 13px 13px 0 var(--ink);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+    }
+    .visual-label { font-size: 28px; font-weight: 900; }
+    .tier-list {
+      flex: 1;
+      min-height: 0;
+      margin-top: 22px;
+      border: 2px solid var(--ink);
+      border-radius: 18px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+    }
+    .tier {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      border-top: 2px solid var(--ink);
+    }
+    .tier:first-child { border-top: 0; }
+    .tier-name {
+      display: flex;
+      align-items: center;
+      padding: 0 22px;
+      border-right: 2px solid var(--ink);
+      font-size: 28px;
+      font-weight: 900;
+    }
+    .tier:nth-child(1) .tier-name { background: #f34a3f; }
+    .tier:nth-child(2) .tier-name { background: var(--orange); }
+    .tier:nth-child(3) .tier-name { background: var(--yellow); }
+    .tier:nth-child(4) .tier-name { background: #f8efd9; }
+    .tier-copy {
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      background: #eeeae2;
+      font-size: 24px;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+
+    .page-title {
+      margin-top: 54px;
+      max-width: 900px;
+      font-size: 72px;
+      line-height: 1.12;
+      letter-spacing: -.04em;
+      font-weight: 950;
+    }
+    .info-list {
+      flex: 1;
+      min-height: 0;
+      margin-top: 42px;
+      display: grid;
+      gap: 24px;
+    }
+    .info-card {
+      position: relative;
+      padding: 30px 32px;
+      border: 3px solid var(--ink);
+      border-radius: 26px;
+      box-shadow: 11px 11px 0 var(--ink);
+      background: var(--panel);
+    }
+    .info-head {
+      display: grid;
+      grid-template-columns: 13px 1fr auto;
+      gap: 22px;
+      align-items: center;
+    }
+    .bar { width: 13px; height: 74px; border-radius: 8px; background: var(--blue); }
+    .info-card:nth-child(2) .bar { background: var(--orange); }
+    .info-card:nth-child(3) .bar { background: var(--red); }
+    .info-card h3 { font-size: 38px; line-height: 1.15; }
+    .badge {
+      padding: 8px 17px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: var(--yellow);
+      font-size: 22px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+    .judgement {
+      margin-top: 18px;
+      font-size: 27px;
+      line-height: 1.48;
+      font-weight: 760;
+    }
+    .meta-line {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 2px solid var(--rule);
+      color: var(--muted);
+      font-size: 21px;
+      line-height: 1.35;
+    }
+    .footer {
+      position: absolute;
+      left: 70px;
+      right: 70px;
+      bottom: 51px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    /* 03 步骤时间线 */
+    .timeline {
+      flex: 1;
+      min-height: 0;
+      margin-top: 38px;
+      display: grid;
+      gap: 18px;
+    }
+    .timeline-step {
+      display: grid;
+      grid-template-columns: 94px 1fr auto;
+      gap: 22px;
+      align-items: center;
+      padding: 24px 28px;
+      border: 3px solid var(--ink);
+      border-radius: 24px;
+      box-shadow: 9px 9px 0 var(--ink);
+      background: var(--panel);
+    }
+    .step-number {
+      width: 70px;
+      height: 70px;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      background: var(--yellow);
+      font-size: 29px;
+      font-weight: 950;
+    }
+    .timeline-step:nth-child(2) .step-number { background: #b9dcff; }
+    .timeline-step:nth-child(3) .step-number { background: #ffc26e; }
+    .timeline-step:nth-child(4) .step-number { background: #ff8c84; }
+    .timeline-copy h3 { font-size: 32px; margin-bottom: 7px; }
+    .timeline-copy p { color: var(--muted); font-size: 23px; line-height: 1.4; }
+    .step-tag {
+      padding: 7px 13px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      font-size: 18px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    /* 04 排名分级 */
+    .ranking-board {
+      flex: 1;
+      min-height: 0;
+      margin-top: 40px;
+      padding: 26px;
+      border: 3px solid var(--ink);
+      border-radius: 27px;
+      box-shadow: 12px 12px 0 var(--ink);
+      background: var(--panel);
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+    }
+    .rank-row {
+      display: grid;
+      grid-template-columns: 145px 1fr auto;
+      align-items: center;
+      border-top: 2px solid var(--ink);
+    }
+    .rank-row:first-child { border-top: 0; }
+    .rank-label {
+      align-self: stretch;
+      display: grid;
+      place-items: center;
+      border-right: 2px solid var(--ink);
+      font-size: 31px;
+      font-weight: 950;
+      background: #f34a3f;
+    }
+    .rank-row:nth-child(2) .rank-label { background: var(--orange); }
+    .rank-row:nth-child(3) .rank-label { background: var(--yellow); }
+    .rank-row:nth-child(4) .rank-label { background: #f7ecd3; }
+    .rank-copy { padding: 18px 24px; }
+    .rank-copy h3 { font-size: 29px; margin-bottom: 7px; }
+    .rank-copy p { color: var(--muted); font-size: 21px; line-height: 1.35; }
+    .rank-score {
+      margin-right: 20px;
+      padding: 8px 15px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: white;
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    /* 05 截图案例 */
+    .screenshot-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 36px;
+      border: 3px solid var(--ink);
+      border-radius: 27px;
+      box-shadow: 12px 12px 0 var(--ink);
+      background: var(--panel);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .browser-bar {
+      height: 64px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 3px solid var(--ink);
+      background: #efe7da;
+    }
+    .browser-dot { width: 14px; height: 14px; border: 2px solid var(--ink); border-radius: 50%; }
+    .browser-address {
+      flex: 1;
+      margin-left: 12px;
+      padding: 7px 14px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+      font: 17px Consolas, monospace;
+    }
+    .screen-content {
+      flex: 1;
+      min-height: 0;
+      padding: 30px;
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 24px;
+      background: #f4f1eb;
+    }
+    .screen-sidebar { border: 2px solid var(--ink); border-radius: 18px; padding: 18px; background: white; }
+    .screen-sidebar span { display: block; height: 16px; margin: 16px 0; border-radius: 8px; background: #d8d1c7; }
+    .screen-sidebar span:first-child { background: var(--red); }
+    .screen-main { display: grid; grid-template-rows: 110px 1fr; gap: 20px; }
+    .screen-header { border: 2px solid var(--ink); border-radius: 18px; background: white; padding: 22px; }
+    .screen-header strong { font-size: 26px; }
+    .screen-header p { margin-top: 9px; color: var(--muted); font-size: 19px; }
+    .screen-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .screen-card { border: 2px solid var(--ink); border-radius: 18px; background: white; padding: 20px; }
+    .screen-card i { display: block; width: 58px; height: 58px; margin-bottom: 18px; border: 2px solid var(--ink); border-radius: 14px; background: var(--yellow); }
+    .screen-card:nth-child(2) i { background: var(--blue); }
+    .screen-card:nth-child(3) i { background: var(--orange); }
+    .screen-card:nth-child(4) i { background: var(--red); }
+    .screen-card strong { font-size: 23px; }
+    .case-notes { margin-top: 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .case-note { padding: 18px 20px; border: 2px solid var(--ink); border-radius: 18px; background: white; font-size: 21px; line-height: 1.35; font-weight: 750; }
+    .case-note span { color: var(--red); }
+
+    /* 06 清单总结 */
+    .checklist-panel {
+      flex: 1;
+      min-height: 0;
+      margin-top: 38px;
+      padding: 26px 30px;
+      border: 3px solid var(--ink);
+      border-radius: 28px;
+      box-shadow: 12px 12px 0 var(--ink);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+    }
+    .check-row {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 58px 1fr auto;
+      gap: 20px;
+      align-items: center;
+      border-top: 2px solid var(--rule);
+    }
+    .check-row:first-child { border-top: 0; }
+    .check-box {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 2px solid var(--ink);
+      border-radius: 10px;
+      background: var(--yellow);
+      font-size: 25px;
+      font-weight: 950;
+    }
+    .check-copy h3 { font-size: 29px; margin-bottom: 5px; }
+    .check-copy p { color: var(--muted); font-size: 20px; line-height: 1.35; }
+    .check-state { color: var(--red); font: 18px Consolas, monospace; }
+    .summary-banner {
+      margin-top: 26px;
+      padding: 23px 28px;
+      border: 3px solid var(--ink);
+      border-radius: 22px;
+      background: var(--yellow);
+      font-size: 28px;
+      line-height: 1.35;
+      font-weight: 900;
+      text-align: center;
+    }
+    [contenteditable="true"]:focus { outline: 3px dashed var(--red); outline-offset: 4px; }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <main class="content" data-card-content="" contenteditable="true"><div class="pill">情绪自救清单</div><h1 class="cover-title">停止内耗的第 30 天<br>我重新拿回了掌控感</h1><p class="lead">写给总觉得「累但没有理由」的人：一套每天 10 分钟就能做的情绪复位练习。</p><div class="visual-panel"><div class="visual-label">先从这四件事开始</div><div class="tier-list"><div class="tier"><div class="tier-name">优先</div><div class="tier-copy">睡够、吃饭、晒太阳——能量低时，意志力是奢侈品</div></div><div class="tier"><div class="tier-name">替换</div><div class="tier-copy">把「必须」换成「可以」，语言一变，压力就松一半</div></div><div class="tier"><div class="tier-name">出口</div><div class="tier-copy">写下来、走 20 分钟、找人说三句话</div></div><div class="tier"><div class="tier-name">注意</div><div class="tier-copy">自救不是硬撑；持续两周以上的低落，请找专业帮助</div></div></div></div></main>
+    <footer class="footer" data-card-footer=""><span>慢下来 · 情绪自救</span><span>01 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content="" contenteditable="true"><div class="pill">为什么总是累</div><h2 class="page-title">内耗的三个隐藏来源</h2><div class="info-list"><article class="info-card"><div class="info-head"><span class="bar"></span><h3>未完成的事在后台运行</h3><span class="badge">占用 40%</span></div><p class="judgement">大脑对「没做完」的事格外敏感，它们会像后台程序一样持续耗电。写下来做计划，等于手动结束进程。</p><p class="meta-line">动作：把待办写成清单，每件事标注「下一步动作」</p></article><article class="info-card"><div class="info-head"><span class="bar"></span><h3>对「休息」的负罪感</h3><span class="badge">越休越累</span></div><p class="judgement">一边休息一边自责，等于同时做两份工作；允许自己休息，是恢复的第一步。</p><p class="meta-line">动作：休息前先明确时长与安排</p></article><article class="info-card"><div class="info-head"><span class="bar"></span><h3>被放大的人际反馈</h3><span class="badge">反复回放</span></div><p class="judgement">一句无心的评价会在脑内循环一整天，而对方可能已经忘了。记录事实、区分解读，可以打断循环。</p><p class="meta-line">动作：只写「发生了什么」，不写「他说我」</p></article></div></main>
+    <footer class="footer" data-card-footer=""><span>慢下来 · 情绪自救</span><span>02 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content="" contenteditable="true"><div class="pill">每天 10 分钟</div><h2 class="page-title">4 步完成一次情绪复位</h2><div class="timeline"><article class="timeline-step"><span class="step-number">01</span><div class="timeline-copy"><h3>停下三分钟</h3><p>什么都不做，只做缓慢呼吸。让身体先从警报状态里出来。</p></div><span class="step-tag">STOP</span></article><article class="timeline-step"><span class="step-number">02</span><div class="timeline-copy"><h3>写下此刻的念头</h3><p>不修饰、不评价，全部倒出来。写下来的情绪，才有机会被安放。</p></div><span class="step-tag">WRITE</span></article><article class="timeline-step"><span class="step-number">03</span><div class="timeline-copy"><h3>选一件最小的事去做</h3><p>读 5 页书、走 3000 步、早睡 30 分钟。确定的微小行动能重建掌控感。</p></div><span class="step-tag">ACT</span></article><article class="timeline-step"><span class="step-number">04</span><div class="timeline-copy"><h3>记录下来</h3><p>给今天的情绪打一个分。一个月后，你会看到一条真实的曲线。</p></div><span class="step-tag">LOG</span></article></div></main>
+    <footer class="footer" data-card-footer=""><span>慢下来 · 日课</span><span>03 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content="" contenteditable="true"><div class="pill">方法实测</div><h2 class="page-title">6 种自救方式，我试了一个月</h2><p class="lead">评分维度：见效速度、可持续性、成本。<br>以下为个人体感，仅供参考。</p><div class="ranking-board"><div class="rank-row"><div class="rank-label">首选</div><div class="rank-copy"><h3>每天散步 20 分钟</h3><p>见效最快：焦虑水平当场下降，几乎零门槛</p></div><span class="rank-score">9.5</span></div><div class="rank-row"><div class="rank-label">推荐</div><div class="rank-copy"><h3>睡前写三行日记</h3><p>帮大脑「结束进程」，入睡明显变快</p></div><span class="rank-score">8.8</span></div><div class="rank-row"><div class="rank-label">可选</div><div class="rank-copy"><h3>定期断网半天</h3><p>有效但需要环境配合，独居更容易做到</p></div><span class="rank-score">7.6</span></div><div class="rank-row"><div class="rank-label">谨慎</div><div class="rank-copy"><h3>报复性熬夜刷剧</h3><p>当下爽，第二天疲惫翻倍</p></div><span class="rank-score">3.0</span></div></div></main>
+    <footer class="footer" data-card-footer=""><span>慢下来 · 实测</span><span>04 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content="" contenteditable="true"><div class="pill">两种一天</div><h2 class="page-title">同样的 24 小时，不同的大脑</h2><div class="screenshot-panel"><div class="browser-bar"><i class="browser-dot"></i><i class="browser-dot"></i><i class="browser-dot"></i><div class="browser-address">slow.day / today</div></div><div class="screen-content"><aside class="screen-sidebar"><span></span><span></span><span></span><span></span><span></span></aside><div class="screen-main"><div class="screen-header"><strong>今天的状态看板</strong><p>左边是内耗模式，右边是复位模式</p></div><div class="screen-cards"><div class="screen-card"><i></i><strong>内耗：反复回想</strong></div><div class="screen-card"><i></i><strong>内耗：拖延自责</strong></div><div class="screen-card"><i></i><strong>复位：散步 20 分钟</strong></div><div class="screen-card"><i></i><strong>复位：写下三行</strong></div></div></div></div></div><div class="case-notes"><div class="case-note"><span>01</span> 内耗模式消耗的是同一份能量，却没有任何产出</div><div class="case-note"><span>02</span> 复合型的一天，可以从一个 20 分钟的散步开始</div></div></main>
+    <footer class="footer" data-card-footer=""><span>慢下来 · 对照</span><span>05 / 06</span></footer>
+  </section>
+
+  <section class="card">
+    <main class="content" data-card-content="" contenteditable="true"><div class="pill">发布前最后检查</div><h2 class="page-title">把这份清单存下来</h2><div class="checklist-panel"><div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>今天就做一件小事</h3><p>读 5 页书、走 3000 步，或早睡 30 分钟</p></div><span class="check-state">TODAY</span></div><div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>把「必须」改成「可以」</h3><p>语言一变，压力就松了一半</p></div><span class="check-state">SAY</span></div><div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>给情绪留一个出口</h3><p>写下来、说出来、走出去，任选一种</p></div><span class="check-state">OUT</span></div><div class="check-row"><span class="check-box">✓</span><div class="check-copy"><h3>别一个人硬扛</h3><p>持续两周以上的低落，请寻求专业帮助</p></div><span class="check-state">HELP</span></div></div><div class="summary-banner">慢一点，也是一种前进。收藏这份清单，从今晚早睡 30 分钟开始。</div></main>
+    <footer class="footer" data-card-footer=""><span>慢下来 · 总结</span><span>06 / 06</span></footer>
+  </section>
+
+
+</body></html>

@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>干净青绿信息卡模板</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --paper: #ffffff;
+      --ink: #141414;
+      --muted: #5c5c5c;
+      --line: #e6e6e2;
+      --soft: #f0f0ec;
+      --accent: #1f6b5a;
+      --accent-soft: #e8f3ef;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: #d9d9d6;
+      color: var(--ink);
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    }
+    body {
+      display: grid;
+      gap: 36px;
+      padding: 36px;
+      justify-content: center;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .card {
+      width: 1080px;
+      height: 1440px;
+      overflow: hidden;
+      background: var(--bg);
+      padding: 42px 46px 34px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(900px 420px at 8% -8%, rgba(31,107,90,.08), transparent 60%),
+        radial-gradient(700px 360px at 100% 0%, rgba(20,20,20,.04), transparent 55%);
+      pointer-events: none;
+    }
+    .card > * { position: relative; z-index: 1; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 20px;
+      font-weight: 650;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 20px;
+      font-weight: 750;
+    }
+    .topbar .badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    [data-card-content] {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .footer {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 20px;
+      font-weight: 650;
+    }
+    .footer strong { color: var(--ink); font-weight: 800; }
+
+    .cover-kicker {
+      margin-top: 18px;
+      display: inline-flex;
+      align-self: flex-start;
+      background: var(--ink);
+      color: #fff;
+      font-size: 21px;
+      font-weight: 750;
+      letter-spacing: 1px;
+      padding: 8px 15px;
+      border-radius: 10px;
+    }
+    .cover-title {
+      margin-top: 16px;
+      font-size: 96px;
+      line-height: 1.04;
+      letter-spacing: -3px;
+      font-weight: 950;
+      max-width: 980px;
+    }
+    .cover-title span { color: var(--accent); }
+    .cover-lead {
+      margin-top: 14px;
+      font-size: 26px;
+      line-height: 1.4;
+      color: var(--muted);
+      font-weight: 600;
+      max-width: 920px;
+    }
+
+    .item-stack {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .item-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px 22px 18px;
+      box-shadow: 0 8px 22px rgba(20,20,20,.03);
+    }
+    .item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    .item-name {
+      font-size: 36px;
+      line-height: 1.12;
+      font-weight: 900;
+      letter-spacing: -1px;
+    }
+    .item-index {
+      flex-shrink: 0;
+      width: 50px;
+      height: 50px;
+      border-radius: 14px;
+      background: var(--soft);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      font-weight: 900;
+    }
+    .meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      color: var(--accent);
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .field {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 84px 1fr;
+      gap: 8px;
+      align-items: start;
+    }
+    .field-label {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent);
+      padding-top: 2px;
+    }
+    .field-body {
+      font-size: 22px;
+      line-height: 1.38;
+      color: var(--ink);
+      font-weight: 550;
+    }
+    .mono-bar {
+      margin-top: 10px;
+      padding: 10px 14px;
+      background: var(--soft);
+      border-radius: 10px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 20px;
+      line-height: 1.3;
+      color: #2a2a2a;
+      word-break: break-all;
+    }
+
+    .page-title {
+      margin-top: 26px;
+      font-size: 80px;
+      line-height: 1.06;
+      letter-spacing: -2.5px;
+      font-weight: 950;
+      max-width: 960px;
+    }
+    .page-sub {
+      margin-top: 12px;
+      font-size: 26px;
+      line-height: 1.4;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    [contenteditable="true"]:focus {
+      outline: 2px dashed var(--accent);
+      outline-offset: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 示例封面：按材料替换文案，增减白卡与字段 -->
+  <section class="card" data-page="1">
+    <div class="topbar">
+      <div contenteditable="true">系列名 · 01 / 02</div>
+      <div class="badge" contenteditable="true">分类标签</div>
+    </div>
+    <div data-card-content>
+      <div class="cover-kicker" contenteditable="true">KICKER</div>
+      <h1 class="cover-title" contenteditable="true">封面大标题<br><span>关键词</span>可着色</h1>
+      <p class="cover-lead" contenteditable="true">一句导语：说明本辑在讲什么、读者能带走什么。</p>
+      <div class="item-stack" data-panel data-content-end>
+        <article class="item-card" data-panel-item>
+          <div class="item-head">
+            <div>
+              <h2 class="item-name" contenteditable="true">条目名称 A</h2>
+              <div class="meta" contenteditable="true">★ 数据 / 副标</div>
+            </div>
+            <div class="item-index">01</div>
+          </div>
+          <div class="field">
+            <div class="field-label">简介</div>
+            <p class="field-body" contenteditable="true">替换为材料中的简介原文；字段名可按内容改成「定义 / 场景」等。</p>
+          </div>
+          <div class="field">
+            <div class="field-label">要点</div>
+            <p class="field-body" contenteditable="true">替换为关键能力、适合人群或差异点；尽量保留具体名词与数据。</p>
+          </div>
+          <div class="mono-bar" contenteditable="true">example.com/path-or-command</div>
+        </article>
+        <article class="item-card" data-panel-item>
+          <div class="item-head">
+            <div>
+              <h2 class="item-name" contenteditable="true">条目名称 B</h2>
+              <div class="meta" contenteditable="true">★ 数据 / 副标</div>
+            </div>
+            <div class="item-index">02</div>
+          </div>
+          <div class="field">
+            <div class="field-label">简介</div>
+            <p class="field-body" contenteditable="true">第二张白卡的结构与第一张对齐，内容按材料填写。</p>
+          </div>
+          <div class="field">
+            <div class="field-label">要点</div>
+            <p class="field-body" contenteditable="true">可增减字段行；不要为凑版式虚构信息。</p>
+          </div>
+          <div class="mono-bar" contenteditable="true">example.com/another-path</div>
+        </article>
+      </div>
+    </div>
+    <div class="footer" data-card-footer>
+      <div contenteditable="true">页脚主题路径一句</div>
+      <div><strong>1</strong> / 2</div>
+    </div>
+  </section>
+
+  <!-- 示例内页 -->
+  <section class="card" data-page="2">
+    <div class="topbar">
+      <div contenteditable="true">系列名 · 02 / 02</div>
+      <div class="badge" contenteditable="true">内页标签</div>
+    </div>
+    <div data-card-content>
+      <h1 class="page-title" contenteditable="true">内页标题<br>可两行</h1>
+      <p class="page-sub" contenteditable="true">副标题：点明本页对象或问题。</p>
+      <div class="item-stack" data-panel data-content-end style="margin-top: 22px;">
+        <article class="item-card" data-panel-item>
+          <div class="item-head">
+            <div>
+              <h2 class="item-name" contenteditable="true">条目名称 C</h2>
+              <div class="meta" contenteditable="true">★ 数据 / 副标</div>
+            </div>
+            <div class="item-index">03</div>
+          </div>
+          <div class="field">
+            <div class="field-label">简介</div>
+            <p class="field-body" contenteditable="true">内页白卡与封面共用同一视觉语言；字号可按密度微调。</p>
+          </div>
+          <div class="field">
+            <div class="field-label">要点</div>
+            <p class="field-body" contenteditable="true">保持标签列对齐；链接条放在字段之后。</p>
+          </div>
+          <div class="mono-bar" contenteditable="true">example.com/item-c</div>
+        </article>
+        <article class="item-card" data-panel-item>
+          <div class="item-head">
+            <div>
+              <h2 class="item-name" contenteditable="true">条目名称 D</h2>
+              <div class="meta" contenteditable="true">★ 数据 / 副标</div>
+            </div>
+            <div class="item-index">04</div>
+          </div>
+          <div class="field">
+            <div class="field-label">简介</div>
+            <p class="field-body" contenteditable="true">按材料增减卡片数量；每页常见 2 项，不强制。</p>
+          </div>
+          <div class="field">
+            <div class="field-label">要点</div>
+            <p class="field-body" contenteditable="true">交付前跑 check_card_layout 与目检。</p>
+          </div>
+          <div class="mono-bar" contenteditable="true">example.com/item-d</div>
+        </article>
+      </div>
+    </div>
+    <div class="footer" data-card-footer>
+      <div contenteditable="true">页脚主题路径一句</div>
+      <div><strong>2</strong> / 2</div>
+    </div>
+  </section>
+
+</body>
+</html>

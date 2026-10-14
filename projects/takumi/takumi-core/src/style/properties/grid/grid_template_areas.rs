@@ -1,0 +1,113 @@
+use std::{collections::HashMap, fmt};
+
+use cssparser::{Parser, Token};
+
+use super::write_space_separated;
+use crate::style::{FromCss, MakeComputed, ParseResult, ToCss, unexpected_token};
+
+/// Represents `grid-template-areas` value
+///
+/// Supports either a 2D matrix of area names (use "." for empty) or a CSS string value
+/// like: "a a ." "b b c"
+#[derive(Default, Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct GridTemplateAreas(pub Vec<Vec<String>>);
+
+impl MakeComputed for GridTemplateAreas {}
+
+impl GridTemplateAreas {
+  pub(crate) fn into_taffy(self) -> Option<taffy::GridTemplateAreas<String>> {
+    if self.0.is_empty() {
+      return None;
+    }
+    let row_count = self.0.len() as u16;
+    let column_count = self.0.iter().map(Vec::len).max().unwrap_or(0) as u16;
+
+    let mut bounds: HashMap<&str, (usize, usize, usize, usize)> = HashMap::new();
+    for (r, row) in self.0.iter().enumerate() {
+      for (c, cell) in row.iter().enumerate() {
+        if cell == "." {
+          continue;
+        }
+
+        let entry = bounds.entry(cell.as_str()).or_insert((r, r, c, c));
+        entry.0 = entry.0.min(r);
+        entry.1 = entry.1.max(r);
+        entry.2 = entry.2.min(c);
+        entry.3 = entry.3.max(c);
+      }
+    }
+
+    let mut areas: Vec<taffy::GridTemplateArea<String>> = Vec::with_capacity(bounds.len());
+    for (name, (rmin, rmax, cmin, cmax)) in bounds.into_iter() {
+      areas.push(taffy::GridTemplateArea {
+        name: name.to_string(),
+        row_start: (rmin as u16) + 1,
+        row_end: (rmax as u16) + 2,
+        column_start: (cmin as u16) + 1,
+        column_end: (cmax as u16) + 2,
+      });
+    }
+    Some(taffy::GridTemplateAreas {
+      areas,
+      row_count,
+      column_count,
+    })
+  }
+}
+
+impl<'i> FromCss<'i> for GridTemplateAreas {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    let location = input.current_source_location();
+    if let Ok(ident) = input.try_parse(Parser::expect_ident_cloned) {
+      if ident.as_ref() == "none" {
+        return Ok(GridTemplateAreas(Vec::new()));
+      }
+      return Err(unexpected_token!(location, &Token::Ident(ident)));
+    }
+
+    let mut rows: Vec<Vec<String>> = Vec::new();
+
+    while !input.is_exhausted() {
+      let row = input.expect_ident_or_string()?;
+      let cols: Vec<String> = row.split_whitespace().map(ToString::to_string).collect();
+      if cols.is_empty() {
+        return Err(unexpected_token!(location, &Token::Ident("".into()),));
+      }
+      rows.push(cols);
+    }
+
+    if let Some(width) = rows.first().map(Vec::len)
+      && rows.iter().any(|r| r.len() != width)
+    {
+      return Err(unexpected_token!(
+        input.current_source_location(),
+        &Token::Ident("inconsistent-rows".into()),
+      ));
+    }
+
+    Ok(GridTemplateAreas(rows))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = &["<string>"];
+}
+
+impl ToCss for GridTemplateAreas {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    if self.0.is_empty() {
+      dest.write_str("none")
+    } else {
+      let mut first = true;
+      for row in &self.0 {
+        if !first {
+          dest.write_str(" ")?;
+        }
+        first = false;
+        dest.write_str("\"")?;
+        write_space_separated(dest, row)?;
+        dest.write_str("\"")?;
+      }
+      Ok(())
+    }
+  }
+}

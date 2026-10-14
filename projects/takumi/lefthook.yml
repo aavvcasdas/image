@@ -1,0 +1,17 @@
+pre-commit:
+  piped: true
+  jobs:
+    - run: cargo fmt --all
+      stage_fixed: true
+
+    - run: |
+        set -eu
+        cargo metadata --format-version 1 --no-deps \
+          | jq -r '.packages[] | select(.publish != []) | select(any(.targets[]; .kind | index("lib"))) | [.name, (.manifest_path | rtrimstr("/Cargo.toml"))] | @tsv' \
+          | while IFS=$(printf '\t') read -r name dir; do
+              cargo rdme --force --workspace-project "$name" --readme-path "$dir/README.md" || exit 1
+              git add "$dir/README.md"
+            done
+
+    - run: bun run lint:fix
+      stage_fixed: true

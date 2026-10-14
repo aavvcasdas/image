@@ -1,0 +1,23 @@
+{
+  "name": "example-nextjs",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "lucide-react": "catalog:",
+    "next": "16.3.4",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "takumi-js": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:"
+  }
+}

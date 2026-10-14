@@ -1,0 +1,26 @@
+{
+  "name": "waku-ssr",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "waku dev",
+    "build": "waku build",
+    "start": "waku start",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "~19.2.8",
+    "react-dom": "~19.2.8",
+    "react-server-dom-webpack": "~19.2.8",
+    "takumi-js": "workspace:*",
+    "waku": "1.0.0-rc.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "tailwindcss": "^4.3.3",
+    "typescript": "catalog:",
+    "vitest": "^5.0.0"
+  }
+}

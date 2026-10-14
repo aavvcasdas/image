@@ -1,0 +1,11 @@
+{
+  "width": 1242,
+  "height": 1656,
+  "theme": "ink-paper",
+  "cards": [
+    { "slug": "cover", "theme": "photo-top", "hint": "情绪自救手册", "quote": "停止内耗的第 30 天\n我重新拿回了掌控感", "source": "慢下来 · 日课 001", "bg": "05-desk-watercolor.png" },
+    { "slug": "quote-1", "theme": "ink-paper", "hint": "今天也要好好过", "quote": "你不是懒\n你只是累了", "source": "慢下来 · 日课 002" },
+    { "slug": "quote-2", "theme": "deep-night", "hint": "夜读", "quote": "把「必须」换成「可以」\n压力就松了一半", "source": "慢下来 · 日课 003" },
+    { "slug": "quote-3", "theme": "photo-top", "hint": "写给未来的自己", "quote": "慢一点\n也是一种前进", "source": "慢下来 · 日课 004", "bg": "02-sunrise-mountain.png" }
+  ]
+}

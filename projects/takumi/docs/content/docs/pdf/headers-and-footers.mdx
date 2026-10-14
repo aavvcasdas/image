@@ -1,0 +1,193 @@
+---
+title: Headers & footers
+description: Add repeating PDF headers, footers, and page numbers, and measure the margins they need.
+icon: PanelTop
+---
+
+Pass JSX, HTML, or a node tree to `header` or `footer`. Each repeats in the page margin. Automatic margins make room for their content.
+
+```tsx twoslash title="Repeat a page footer"
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
+
+const pdf = await render(report, {
+  // [!code highlight]
+  footer: (
+    <div tw="flex w-full justify-center text-[10px] text-gray-500">
+      Page <PageNumber /> of <TotalPages />
+    </div>
+  ),
+});
+```
+
+## Pages that differ
+
+`pages` overrides the header or footer on some pages. A page reads each field from `first` or `last`, then `odd` or `even`, then the top-level option. `false` leaves that page's band empty. Pages count from 1 over the whole document, before `pageRanges` drops any.
+
+```tsx twoslash title="No header on the cover, a closing note on the last page"
+import type { ReactNode } from "react";
+declare const invoice: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+import { PageNumber } from "takumi-pdf/primitives";
+
+const pdf = await render(invoice, {
+  header: <p>Acme Ltd</p>,
+  footer: <PageNumber />,
+  // [!code highlight:11]
+  pages: {
+    first: { header: false },
+    last: {
+      footer: (
+        <div>
+          <p>Thank you for your business.</p>
+          <p>Terms: net 30.</p>
+        </div>
+      ),
+    },
+  },
+});
+```
+
+Automatic margins fit the tallest band on every page, so a taller last-page footer does not change where the other pages break. A one-page document is its own first and last page, and `first` wins.
+
+## Sizing the margin
+
+`margin` defaults to `"auto"`. It measures the header and footer at full page width and reserves space above and below the document.
+
+For ordinary page sizes, each automatic top or bottom margin is the larger of 37.8px and the header or footer height plus a 20px inset. Set a numeric margin to override it. Omitted sides remain automatic:
+
+```ts title="Override the top margin"
+const margin = { top: 96 };
+```
+
+Automatic left and right margins are 37.8px on ordinary page sizes. A numeric margin that is too small can let the header or footer overlap the body.
+
+To calculate a numeric margin, call `measure()` with the same page size and fonts as the render. It measures at full page width with three-digit page counters. Add the 20px inset to the returned height.
+
+```tsx twoslash title="Measure a footer margin"
+declare const report: import("react").ReactNode;
+// ---cut---
+import { googleFonts } from "@takumi-rs/helpers";
+import { measure, render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
+
+const fonts = await googleFonts(["Inter"]);
+const footer = (
+  <div style={{ fontFamily: "Inter", fontSize: 10, textAlign: "center" }}>
+    Page <PageNumber /> of <TotalPages />
+  </div>
+);
+
+const { height } = await measure(footer, { size: "a4", fonts }); // [!code highlight]
+const pdf = await render(report, {
+  size: "a4",
+  fonts,
+  footer,
+  margin: { bottom: height + 20 }, // [!code highlight]
+});
+```
+
+Passing `viewport` instead of a page size measures the tree as-is. Counter hooks stay empty.
+
+## Page counters
+
+`<PageNumber />` is the current page, counting from 1. `<TotalPages />` is the number of pages in the document. Both take a `format` prop for a [counter style](#counter-styles), and pass `className`, `style`, and `tw` through.
+
+The primitives render class hooks. A node classed `pageNumber` or `totalPages` receives the counter text, replacing what it holds, so an empty `<span />` is enough. Chromium's print templates use the same two names, and HTML input uses them directly:
+
+```html title="Page counters in HTML"
+Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+```
+
+A node carrying both classes gets the page number.
+
+## Counters outside a band
+
+Counters also work in document content. A `position: fixed` box repeats on every page. Inside it, `<PageNumber />` is evaluated for each page, while `<TotalPages />` shows the document length:
+
+```tsx title="Page counters in a fixed box"
+<div style={{ position: "fixed", bottom: 24, left: 24, right: 24 }}>
+  Page <PageNumber /> of <TotalPages />
+</div>
+```
+
+A fixed box draws over the content rather than in the margin, so leave it room. `margin` sizes itself to the header and footer alone.
+
+In ordinary flow, `<PageNumber />` shows the page containing the counter and `<TotalPages />` shows the document length. These counters require another layout pass because their values depend on pagination. Inline counters use the enclosing box and preceding rendered flow to determine their page.
+
+## Counter styles
+
+The `format` prop names a CSS `@counter-style` and formats the number. On a class hook, add the style name next to the hook class. The first supported name wins. Unsupported names are ignored, and a counter without one counts in `decimal`.
+
+```tsx twoslash title="Format page numbers"
+import type { ReactNode } from "react";
+declare const report: ReactNode;
+// ---cut---
+import { render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
+
+const pdf = await render(report, {
+  footer: (
+    <div style={{ fontSize: 12 }}>
+      {/* [!code highlight:2] */}
+      第 <PageNumber format="trad-chinese-informal" /> 頁，共{" "}
+      <TotalPages format="trad-chinese-informal" /> 頁
+    </div>
+  ),
+});
+```
+
+### Numbers and numerals
+
+| Style                   | Page 7 | Page 12 |
+| ----------------------- | ------ | ------- |
+| `decimal` (default)     | 7      | 12      |
+| `decimal-leading-zero`  | 07     | 12      |
+| `lower-roman`           | vii    | xii     |
+| `upper-roman`           | VII    | XII     |
+| `cjk-decimal`           | 七     | 一二    |
+| `trad-chinese-informal` | 七     | 十二    |
+| `cjk-ideographic`       | 七     | 十二    |
+
+Blink defines `cjk-ideographic` as an extension of `trad-chinese-informal`, and this renderer follows it. Both read out numbers up to 9999. Past that they fall back to `cjk-decimal`, so page 10000 formats as `一零零零零`.
+
+### Alphabets
+
+These styles count the way a spreadsheet names its columns. The letter after `z` is `aa`.
+
+| Style                        | Page 12 |
+| ---------------------------- | ------- |
+| `lower-alpha`, `lower-latin` | l       |
+| `upper-alpha`, `upper-latin` | L       |
+| `lower-greek`                | μ       |
+| `hiragana`                   | し      |
+| `katakana`                   | シ      |
+
+### Other digits
+
+These styles write the decimal number in another script's digits.
+
+| Style          | Page 12 | Style       | Page 12 |
+| -------------- | ------- | ----------- | ------- |
+| `arabic-indic` | ١٢      | `mongolian` | ᠑᠒      |
+| `bengali`      | ১২      | `myanmar`   | ၁၂      |
+| `cambodian`    | ១២      | `oriya`     | ୧୨      |
+| `devanagari`   | १२      | `persian`   | ۱۲      |
+| `gujarati`     | ૧૨      | `tamil`     | ௧௨      |
+| `gurmukhi`     | ੧੨      | `telugu`    | ౧౨      |
+| `kannada`      | ೧೨      | `thai`      | ๑๒      |
+| `khmer`        | ១២      | `tibetan`   | ༡༢      |
+| `lao`          | ໑໒      | `urdu`      | ۱۲      |
+| `malayalam`    | ൧൨      |             |         |
+
+`khmer` and `cambodian` share their digits, as do `persian` and `urdu`.
+
+A registered font has to cover the digits of the style you pick. Latin fonts rarely carry Thai or Tibetan numerals, so pair a script style with a font that has the glyphs.
+
+## Band height
+
+The renderer recalculates header and footer height with the actual page count, up to three passes. Automatic margins use that height across the document. Leave enough width for counters to avoid wrapping when the page count grows.

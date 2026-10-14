@@ -1,0 +1,12 @@
+[package]
+name = "example"
+edition = "2024"
+publish = false
+
+[dependencies.takumi]
+path = "../../takumi"
+
+[lints]
+workspace = true
+
+

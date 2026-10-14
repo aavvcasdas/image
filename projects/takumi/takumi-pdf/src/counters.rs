@@ -1,0 +1,527 @@
+//! `@counter-style` formatting and substitution of the page-counter class hooks.
+
+use std::{collections::HashMap, ops::Range};
+
+use takumi_core::layout::node::{Node, NodeKind};
+
+use crate::interactive::percent_decode;
+
+/// Styles that write a decimal number in another script's digits, zero first.
+const DIGIT_STYLES: [(&str, [char; 10]); 20] = [
+  ("cjk-decimal", CHINESE_DIGITS),
+  (
+    "arabic-indic",
+    ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'],
+  ),
+  (
+    "bengali",
+    ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'],
+  ),
+  (
+    "cambodian",
+    ['០', '១', '២', '៣', '៤', '៥', '៦', '៧', '៨', '៩'],
+  ),
+  ("khmer", ['០', '១', '២', '៣', '៤', '៥', '៦', '៧', '៨', '៩']),
+  (
+    "devanagari",
+    ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'],
+  ),
+  (
+    "gujarati",
+    ['૦', '૧', '૨', '૩', '૪', '૫', '૬', '૭', '૮', '૯'],
+  ),
+  (
+    "gurmukhi",
+    ['੦', '੧', '੨', '੩', '੪', '੫', '੬', '੭', '੮', '੯'],
+  ),
+  (
+    "kannada",
+    ['೦', '೧', '೨', '೩', '೪', '೫', '೬', '೭', '೮', '೯'],
+  ),
+  ("lao", ['໐', '໑', '໒', '໓', '໔', '໕', '໖', '໗', '໘', '໙']),
+  (
+    "malayalam",
+    ['൦', '൧', '൨', '൩', '൪', '൫', '൬', '൭', '൮', '൯'],
+  ),
+  (
+    "mongolian",
+    ['᠐', '᠑', '᠒', '᠓', '᠔', '᠕', '᠖', '᠗', '᠘', '᠙'],
+  ),
+  (
+    "myanmar",
+    ['၀', '၁', '၂', '၃', '၄', '၅', '၆', '၇', '၈', '၉'],
+  ),
+  ("oriya", ['୦', '୧', '୨', '୩', '୪', '୫', '୬', '୭', '୮', '୯']),
+  (
+    "persian",
+    ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'],
+  ),
+  ("urdu", ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹']),
+  ("tamil", ['௦', '௧', '௨', '௩', '௪', '௫', '௬', '௭', '௮', '௯']),
+  ("telugu", ['౦', '౧', '౨', '౩', '౪', '౫', '౬', '౭', '౮', '౯']),
+  ("thai", ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙']),
+  (
+    "tibetan",
+    ['༠', '༡', '༢', '༣', '༤', '༥', '༦', '༧', '༨', '༩'],
+  ),
+];
+
+/// Styles that count through an alphabet: a, b, ..., z, aa, ab, and so on.
+const ALPHABET_STYLES: [(&str, &str); 7] = [
+  ("lower-alpha", "abcdefghijklmnopqrstuvwxyz"),
+  ("lower-latin", "abcdefghijklmnopqrstuvwxyz"),
+  ("upper-alpha", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+  ("upper-latin", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+  ("lower-greek", "αβγδεζηθικλμνξοπρστυφχψω"),
+  (
+    "hiragana",
+    "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをん",
+  ),
+  (
+    "katakana",
+    "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヰヱヲン",
+  ),
+];
+
+/// The class hook the current page number is requested through.
+const PAGE_HOOK: &str = "pageNumber";
+
+/// The class hook the page count is requested through.
+const PAGES_HOOK: &str = "totalPages";
+
+/// The class hook a cross-reference to another element's page is requested
+/// through. Chromium has no counterpart, so the name follows the CSS
+/// `target-counter(attr(href), page)` this stands in for.
+const TARGET_HOOK: &str = "targetPageNumber";
+
+/// A `@counter-style` this renderer formats.
+#[derive(Clone, Copy)]
+enum CounterStyle {
+  Decimal,
+  DecimalLeadingZero,
+  LowerRoman,
+  UpperRoman,
+  /// Reading-style Chinese numerals. Blink defines `cjk-ideographic` as
+  /// `extends trad-chinese-informal`.
+  ChineseInformal,
+  /// A decimal number in another script's digits, zero first.
+  Digits(&'static [char; 10]),
+  /// Counting through an alphabet: a, b, ..., z, aa, ab, and so on.
+  Alphabet(&'static str),
+}
+
+impl CounterStyle {
+  fn from_name(name: &str) -> Option<Self> {
+    if let Some((_, digits)) = DIGIT_STYLES.iter().find(|(style, _)| *style == name) {
+      return Some(Self::Digits(digits));
+    }
+    if let Some((_, alphabet)) = ALPHABET_STYLES.iter().find(|(style, _)| *style == name) {
+      return Some(Self::Alphabet(alphabet));
+    }
+    match name {
+      "decimal" => Some(Self::Decimal),
+      "decimal-leading-zero" => Some(Self::DecimalLeadingZero),
+      "lower-roman" => Some(Self::LowerRoman),
+      "upper-roman" => Some(Self::UpperRoman),
+      "trad-chinese-informal" | "cjk-ideographic" => Some(Self::ChineseInformal),
+      _ => None,
+    }
+  }
+
+  /// The style a hook's class list names, `decimal` when none does.
+  fn from_classes(classes: &str) -> Self {
+    classes
+      .split_whitespace()
+      .find_map(Self::from_name)
+      .unwrap_or(Self::Decimal)
+  }
+
+  fn format(self, value: usize) -> String {
+    match self {
+      Self::Digits(digits) => value
+        .to_string()
+        .bytes()
+        .map(|digit| digits[usize::from(digit - b'0')])
+        .collect(),
+      Self::Alphabet(alphabet) => alphabetic(value, alphabet),
+      Self::ChineseInformal => chinese_informal(value),
+      Self::LowerRoman => roman(value).to_ascii_lowercase(),
+      Self::UpperRoman => roman(value),
+      Self::DecimalLeadingZero => format!("{value:02}"),
+      Self::Decimal => value.to_string(),
+    }
+  }
+
+  /// Every character the style can produce.
+  fn characters(self) -> String {
+    match self {
+      Self::Digits(digits) => digits.iter().collect(),
+      Self::Alphabet(alphabet) => alphabet.to_string(),
+      Self::LowerRoman => "ivxlcdm".to_string(),
+      Self::UpperRoman => "IVXLCDM".to_string(),
+      Self::ChineseInformal => CHINESE_DIGITS.iter().collect::<String>() + "十百千",
+      Self::Decimal | Self::DecimalLeadingZero => "0123456789".to_string(),
+    }
+  }
+}
+
+/// Counts through `alphabet` the way a spreadsheet names its columns, where the
+/// last letter carries no zero and so `z` is followed by `aa`.
+fn alphabetic(value: usize, alphabet: &str) -> String {
+  let letters: Vec<char> = alphabet.chars().collect();
+
+  if value == 0 || letters.is_empty() {
+    return value.to_string();
+  }
+  let mut remaining = value;
+  let mut out = Vec::new();
+
+  while remaining > 0 {
+    remaining -= 1;
+    out.push(letters[remaining % letters.len()]);
+    remaining /= letters.len();
+  }
+  out.reverse();
+  out.into_iter().collect()
+}
+
+const CHINESE_DIGITS: [char; 10] = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+/// Reading-style Chinese numerals (一, 十二, 一百零三) up to 9999; larger
+/// values fall back to positional digits.
+fn chinese_informal(value: usize) -> String {
+  if value >= 10_000 {
+    return CounterStyle::Digits(&CHINESE_DIGITS).format(value);
+  }
+  if value == 0 {
+    return CHINESE_DIGITS[0].to_string();
+  }
+  let mut out = String::new();
+  let mut needs_zero = false;
+
+  for (unit, name) in [
+    (1000, Some('千')),
+    (100, Some('百')),
+    (10, Some('十')),
+    (1, None),
+  ] {
+    let digit = value / unit % 10;
+
+    if digit == 0 {
+      needs_zero = !out.is_empty();
+      continue;
+    }
+    if needs_zero {
+      out.push(CHINESE_DIGITS[0]);
+      needs_zero = false;
+    }
+    // 10-19 reads 十 not 一十.
+    if !(unit == 10 && digit == 1 && value < 20) {
+      out.push(CHINESE_DIGITS[digit]);
+    }
+    if let Some(name) = name {
+      out.push(name);
+    }
+  }
+  out
+}
+
+fn roman(value: usize) -> String {
+  const NUMERALS: [(usize, &str); 13] = [
+    (1000, "M"),
+    (900, "CM"),
+    (500, "D"),
+    (400, "CD"),
+    (100, "C"),
+    (90, "XC"),
+    (50, "L"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
+  ];
+  let mut remaining = value;
+  let mut out = String::new();
+
+  for (unit, numeral) in NUMERALS {
+    while remaining >= unit {
+      out.push_str(numeral);
+      remaining -= unit;
+    }
+  }
+  out
+}
+
+/// The characters the page counters named by `classes` can produce, or nothing
+/// when no class asks for a counter.
+///
+/// A counter's characters appear nowhere in the document, so a caller choosing
+/// which faces to load has no other way to learn it needs, say, Thai digits.
+pub fn counter_characters<'c>(classes: impl IntoIterator<Item = &'c str>) -> String {
+  let mut hooked = false;
+  let mut characters = String::new();
+
+  for class in classes {
+    if [PAGE_HOOK, PAGES_HOOK, TARGET_HOOK].contains(&class) {
+      hooked = true;
+      continue;
+    }
+    if let Some(style) = CounterStyle::from_name(class) {
+      characters.push_str(&style.characters());
+    }
+  }
+
+  if !hooked {
+    return String::new();
+  }
+  // A hook without a style counts in decimal, and a band can hold both: a
+  // plain `pageNumber` beside a `totalPages thai` still needs its own digits.
+  CounterStyle::Decimal.characters() + &characters
+}
+
+/// The counter value a node's class hooks request, if any: `pageNumber` or
+/// `totalPages`, optionally paired with a `@counter-style` name — the same
+/// contract as Chromium's print header/footer templates.
+pub(crate) fn counter_text(node: &Node, page: usize, pages: usize) -> Option<String> {
+  let classes = node.class_name()?;
+  let value = if has_class(classes, PAGE_HOOK) {
+    page
+  } else if has_class(classes, PAGES_HOOK) {
+    pages
+  } else {
+    return None;
+  };
+
+  Some(CounterStyle::from_classes(classes).format(value))
+}
+
+/// The page a `targetPageNumber` node asks for, formatted. The target is the
+/// fragment of the nearest enclosing `href`, which is the same node a link
+/// annotation reads. A fragment naming no element renders empty, like a link
+/// annotation that finds no destination.
+fn target_counter_text(
+  node: &Node,
+  href: Option<&str>,
+  page_of: &impl Fn(&str) -> Option<usize>,
+) -> Option<String> {
+  let classes = node.class_name()?;
+
+  if !has_class(classes, TARGET_HOOK) {
+    return None;
+  }
+  let style = CounterStyle::from_classes(classes);
+  let page = href
+    .and_then(|href| href.strip_prefix('#'))
+    .filter(|fragment| !fragment.is_empty())
+    .and_then(|fragment| page_of(&percent_decode(fragment)));
+
+  Some(page.map_or_else(String::new, |page| style.format(page)))
+}
+
+/// Whether a tree asks for any target page counter. Only such a tree pays for
+/// the extra pagination passes that resolve one.
+pub(crate) fn has_target_counters(node: &Node) -> bool {
+  any_node(node, &|node| {
+    node
+      .class_name()
+      .is_some_and(|classes| has_class(classes, TARGET_HOOK))
+  })
+}
+
+/// Fills `targetPageNumber` hooks with the page their target sits on, and
+/// collects what it wrote so a caller can see whether the numbers moved.
+pub(crate) fn substitute_target_counters(
+  node: &mut Node,
+  href: Option<&str>,
+  page_of: &impl Fn(&str) -> Option<usize>,
+  written: &mut Vec<String>,
+) {
+  let own = node.href().map(str::to_owned);
+  let href = own.as_deref().or(href);
+
+  if let Some(text) = target_counter_text(node, href, page_of) {
+    written.push(text.clone());
+    // An unresolved target empties the node rather than holding empty text,
+    // which would still reach the page as a structure element.
+    if text.is_empty()
+      && let NodeKind::Container { children } = &mut node.kind
+    {
+      children.clear();
+    } else {
+      write_counter(node, text);
+    }
+    return;
+  }
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_target_counters(child, href, page_of, written);
+    }
+  }
+}
+
+/// Whether a tree holds a page-counter hook. A band or repeated box without one
+/// lays out identically on every page, so it is prepared once and reused.
+pub(crate) fn has_page_counters(node: &Node) -> bool {
+  any_node(node, &|node| counter_text(node, 1, 1).is_some())
+}
+
+/// Whether `matches` holds for a node of the tree, the root included.
+fn any_node(node: &Node, matches: &impl Fn(&Node) -> bool) -> bool {
+  if matches(node) {
+    return true;
+  }
+  match &node.kind {
+    NodeKind::Container { children } => children.iter().any(|child| any_node(child, matches)),
+    _ => false,
+  }
+}
+
+fn has_class(classes: &str, class: &str) -> bool {
+  classes.split_whitespace().any(|name| name == class)
+}
+
+/// Fills `pageNumber` / `totalPages` class hooks with the formatted counter,
+/// like Chromium assigning `textContent` in its header/footer template.
+pub(crate) fn substitute_page_counters(node: &mut Node, page: usize, pages: usize) {
+  if let Some(text) = counter_text(node, page, pages) {
+    write_counter(node, text);
+    return;
+  }
+  if let NodeKind::Container { children } = &mut node.kind {
+    for child in children {
+      substitute_page_counters(child, page, pages);
+    }
+  }
+}
+
+/// The pages a laid-out box covers: the one it starts on, and the one the flow
+/// continues on after it.
+pub(crate) struct BoxPages {
+  pub(crate) start: usize,
+  pub(crate) next: Option<usize>,
+}
+
+/// The state a content-counter walk carries: what the boxes resolved to, and
+/// how far the flow has come.
+pub(crate) struct FlowCounters<'c> {
+  page_of: &'c HashMap<usize, BoxPages>,
+  pages: usize,
+  repeated: &'c [Range<usize>],
+  cursor: usize,
+  reached: Option<usize>,
+}
+
+impl<'c> FlowCounters<'c> {
+  pub(crate) fn new(
+    page_of: &'c HashMap<usize, BoxPages>,
+    pages: usize,
+    repeated: &'c [Range<usize>],
+  ) -> Self {
+    Self {
+      page_of,
+      pages,
+      repeated,
+      cursor: 0,
+      reached: None,
+    }
+  }
+
+  /// Fills the content's hooks with the page they land on, taken from the boxes
+  /// by preorder position. A hook laid out inline has no box of its own, so it
+  /// takes the later of the box that holds it and the flow that closed before
+  /// it. A hook inside a repeated subtree is left alone: that box numbers itself
+  /// per page. Counting walks the tree as it stands, so a hook is written only
+  /// after its own subtree has been counted.
+  pub(crate) fn substitute(
+    &mut self,
+    node: &mut Node,
+    inherited: Option<usize>,
+    written: &mut Vec<String>,
+  ) {
+    let index = self.cursor;
+    let own = self.page_of.get(&index);
+    let inherit = own.map_or(inherited, |pages| Some(pages.start));
+
+    self.cursor += 1;
+    if let NodeKind::Container { children } = &mut node.kind {
+      for child in children {
+        self.substitute(child, inherit, written);
+      }
+    }
+    let page = match own {
+      Some(pages) => Some(pages.start),
+      None => inherit.map(|page| self.reached.map_or(page, |after| page.max(after))),
+    };
+
+    if let Some(page) = page
+      && !self.repeated.iter().any(|range| range.contains(&index))
+      && let Some(text) = counter_text(node, page, self.pages)
+    {
+      written.push(text.clone());
+      write_counter(node, text);
+    }
+    if let Some(after) = self.page_of.get(&index).and_then(|pages| pages.next) {
+      self.reached = Some(after);
+    }
+  }
+}
+
+fn write_counter(node: &mut Node, text: String) {
+  match &mut node.kind {
+    NodeKind::Text(data) => data.text = text,
+    NodeKind::Container { children } => *children = vec![Node::text(text)],
+    _ => {}
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn format_counter(value: usize, style: &str) -> String {
+    CounterStyle::from_classes(style).format(value)
+  }
+
+  #[test]
+  fn digit_styles_spell_the_number_in_their_own_script() {
+    assert_eq!(format_counter(2026, "devanagari"), "२०२६");
+    assert_eq!(format_counter(2026, "thai"), "๒๐๒๖");
+    assert_eq!(format_counter(2026, "arabic-indic"), "٢٠٢٦");
+    // `khmer` and `urdu` are the same digits under another name.
+    assert_eq!(format_counter(7, "khmer"), format_counter(7, "cambodian"));
+    assert_eq!(format_counter(7, "urdu"), format_counter(7, "persian"));
+  }
+
+  #[test]
+  fn alphabet_styles_carry_past_their_last_letter() {
+    assert_eq!(format_counter(1, "lower-alpha"), "a");
+    assert_eq!(format_counter(26, "lower-alpha"), "z");
+    assert_eq!(format_counter(27, "lower-alpha"), "aa");
+    assert_eq!(format_counter(28, "upper-latin"), "AB");
+    assert_eq!(format_counter(1, "lower-greek"), "α");
+    assert_eq!(format_counter(1, "katakana"), "ア");
+  }
+
+  #[test]
+  fn a_styled_counter_leaves_an_unstyled_one_its_digits() {
+    let mixed = counter_characters(["pageNumber", "totalPages", "thai"]);
+
+    assert!(mixed.contains('7'), "the plain counter lost its digits");
+    assert!(mixed.contains('๗'), "the styled counter lost its digits");
+    assert_eq!(
+      counter_characters(["nav", "thai"]),
+      "",
+      "no counter, no characters"
+    );
+    assert_eq!(counter_characters(["pageNumber"]), "0123456789");
+  }
+
+  #[test]
+  fn unknown_styles_count_in_decimal() {
+    assert_eq!(format_counter(42, "no-such-style"), "42");
+    assert!(CounterStyle::from_name("no-such-style").is_none());
+    assert!(CounterStyle::from_name("tibetan").is_some());
+  }
+}

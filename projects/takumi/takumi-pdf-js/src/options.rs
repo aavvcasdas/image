@@ -1,0 +1,354 @@
+//! Deserialization of the render/measure option object, and the geometry and
+//! image resolution it drives.
+
+use serde::Deserialize;
+use takumi_bindings_common::input::ImageSource;
+use takumi_core::{
+  layout::node::Node,
+  style::{Color, ColorInput, CssSource, FromCssStr},
+  viewport::Viewport,
+};
+use takumi_pdf::{
+  Band, PageMargin, PageMargins, PageOptions, PageOverride, PageRange, PageRules, UncoveredText,
+};
+
+use crate::metadata::{AttachmentInput, MetadataInput, PdfaInput, TaggedInput};
+
+/// Explicit page or viewport dimensions in CSS px.
+#[derive(Deserialize, Clone, Copy)]
+struct Dimensions {
+  width: f32,
+  height: f32,
+}
+
+/// Viewport for single-page output. A missing height sizes the page to the
+/// laid-out content.
+#[derive(Deserialize, Clone, Copy)]
+struct ViewportInput {
+  width: f32,
+  height: Option<f32>,
+}
+
+/// A page size: a preset name (`"a4"`, `"letter"`) or explicit dimensions.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SizeInput {
+  Named(String),
+  Dimensions(Dimensions),
+}
+
+/// A page margin: one value for all sides, or per-side values (a side left out
+/// is `auto`).
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MarginInput {
+  Uniform(SideInput),
+  Sides {
+    top: Option<SideInput>,
+    right: Option<SideInput>,
+    bottom: Option<SideInput>,
+    left: Option<SideInput>,
+  },
+}
+
+/// One side: a length in px, or a keyword for a size the renderer works out.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SideInput {
+  Px(f32),
+  Keyword(MarginKeyword),
+}
+
+/// A margin the renderer sizes itself.
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum MarginKeyword {
+  /// The space the band on that side takes.
+  Auto,
+}
+
+impl SideInput {
+  fn margin(&self) -> PageMargin {
+    match self {
+      Self::Px(value) => PageMargin::Px(*value),
+      Self::Keyword(MarginKeyword::Auto) => PageMargin::Auto,
+    }
+  }
+}
+
+fn side_margin(side: &Option<SideInput>) -> PageMargin {
+  side.as_ref().map(SideInput::margin).unwrap_or_default()
+}
+
+fn resolve_page(
+  size: Option<&SizeInput>,
+  landscape: bool,
+  margin: Option<&MarginInput>,
+) -> Result<PageOptions, js_sys::Error> {
+  let mut page = match size {
+    None => PageOptions::A4,
+    Some(SizeInput::Dimensions(dimensions)) => PageOptions {
+      width: dimensions.width,
+      height: dimensions.height,
+      ..PageOptions::A4
+    },
+    Some(SizeInput::Named(name)) => match name.to_ascii_lowercase().as_str() {
+      "a3" => PageOptions::A3,
+      "a4" => PageOptions::A4,
+      "a5" => PageOptions::A5,
+      "b4" => PageOptions::B4,
+      "b5" => PageOptions::B5,
+      "jis-b4" => PageOptions::JIS_B4,
+      "jis-b5" => PageOptions::JIS_B5,
+      "ledger" => PageOptions::LEDGER,
+      "legal" => PageOptions::LEGAL,
+      "letter" => PageOptions::LETTER,
+      other => {
+        return Err(js_sys::Error::new(&format!("unknown page size: {other}")));
+      }
+    },
+  };
+
+  if landscape {
+    page = page.landscape();
+  }
+  match margin {
+    None => {}
+    Some(MarginInput::Uniform(value)) => {
+      let side = value.margin();
+
+      page.margin = PageMargins {
+        top: side,
+        right: side,
+        bottom: side,
+        left: side,
+      };
+    }
+    Some(MarginInput::Sides {
+      top,
+      right,
+      bottom,
+      left,
+    }) => {
+      page.margin = PageMargins {
+        top: side_margin(top),
+        right: side_margin(right),
+        bottom: side_margin(bottom),
+        left: side_margin(left),
+      };
+    }
+  }
+  Ok(page)
+}
+
+/// One entry of `pageRanges`: a 1-based page number, or an inclusive span.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(untagged)]
+pub(crate) enum PageRangeInput {
+  Single(usize),
+  Span {
+    from: Option<usize>,
+    to: Option<usize>,
+  },
+}
+
+impl From<PageRangeInput> for PageRange {
+  fn from(input: PageRangeInput) -> Self {
+    match input {
+      PageRangeInput::Single(page) => PageRange::single(page),
+      PageRangeInput::Span { from, to } => PageRange { from, to },
+    }
+  }
+}
+
+/// The paper color, parsed from a CSS color.
+pub(crate) fn page_background(color: Option<&str>) -> Result<Option<Color>, js_sys::Error> {
+  color
+    .map(|color| match ColorInput::from_css_str(color) {
+      Ok(ColorInput::Value(color)) => Ok(color),
+      _ => Err(js_sys::Error::new(&format!(
+        "backgroundColor is not a color: {color}"
+      ))),
+    })
+    .transpose()
+}
+
+/// Options for rendering a PDF.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PdfRenderOptions {
+  /// Fixed viewport for single-page output: percentage heights resolve
+  /// against it and overflowing content is clipped. Mutually exclusive with
+  /// the paged fields.
+  viewport: Option<ViewportInput>,
+  /// Page size for paged output. Defaults to A4.
+  size: Option<SizeInput>,
+  /// Swaps the page's width and height, including explicit sizes.
+  landscape: Option<bool>,
+  /// Page margin in CSS px: one number or per-side values.
+  margin: Option<MarginInput>,
+  /// Paper color as a CSS color, painted under everything on every page.
+  pub(crate) background_color: Option<String>,
+  /// Band repeated at the top of every page. Nodes classed `pageNumber` /
+  /// `totalPages` receive the counters, optionally formatted by a
+  /// supported `@counter-style` name in the same class list.
+  pub(crate) header: Option<BandInput>,
+  /// Band repeated at the bottom of every page; same class hooks as `header`.
+  pub(crate) footer: Option<BandInput>,
+  /// What some pages draw differently from the rest.
+  pub(crate) pages: Option<PageRulesInput>,
+  /// The pages the output keeps, 1-based. Page counters keep their full-output
+  /// numbers.
+  pub(crate) page_ranges: Option<Vec<PageRangeInput>>,
+  /// Pre-fetched images keyed by URL.
+  pub(crate) images: Option<Vec<ImageSource>>,
+  /// CSS to apply before layout: stylesheet text, or a rule written as an
+  /// object.
+  pub(crate) css: Option<Vec<CssSource>>,
+  /// Per-render font stack: ordered family names used as the fallback chain.
+  pub(crate) font_families: Option<Vec<String>>,
+  /// Default BCP-47 language tag applied to the root.
+  pub(crate) lang: Option<String>,
+  /// Document metadata written to the PDF's info dictionary.
+  pub(crate) metadata: Option<MetadataInput>,
+  /// Generates a PDF outline (bookmarks) from `h1`–`h6` headings.
+  pub(crate) outline: Option<bool>,
+  /// PDF/A conformance level: "2a", "2b", "2u", "3a", "3b", "3u", "4" or
+  /// "4f".
+  pub(crate) pdfa: Option<PdfaInput>,
+  /// Structure-tree emission: `false`, `true` (default), or `"ua1"` / `"ua2"`
+  /// to also validate against that accessibility standard.
+  pub(crate) tagged: Option<TaggedInput>,
+  /// Files attached to the document.
+  pub(crate) attachments: Option<Vec<AttachmentInput>>,
+  /// What a character no registered font covers turns into: `"error"`
+  /// (default), `"placeholder"` or `"blank"`.
+  pub(crate) uncovered_text: Option<UncoveredTextInput>,
+}
+
+/// `uncoveredText` names accepted from JS.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum UncoveredTextInput {
+  Error,
+  Placeholder,
+  Blank,
+}
+
+impl From<UncoveredTextInput> for UncoveredText {
+  fn from(input: UncoveredTextInput) -> Self {
+    match input {
+      UncoveredTextInput::Error => Self::Error,
+      UncoveredTextInput::Placeholder => Self::Placeholder,
+      UncoveredTextInput::Blank => Self::Blank,
+    }
+  }
+}
+
+/// A band as the caller writes it: a node, or `false` for none.
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub(crate) enum BandInput {
+  Off(False),
+  Node(Box<Node>),
+}
+
+/// The one boolean a band takes.
+#[derive(Deserialize)]
+#[serde(try_from = "bool")]
+pub(crate) struct False;
+
+impl TryFrom<bool> for False {
+  type Error = String;
+
+  fn try_from(value: bool) -> Result<Self, Self::Error> {
+    match value {
+      false => Ok(Self),
+      true => Err("a band is a node or false; true names nothing".into()),
+    }
+  }
+}
+
+impl From<BandInput> for Band {
+  fn from(input: BandInput) -> Self {
+    match input {
+      BandInput::Off(False) => Self::Off,
+      BandInput::Node(node) => Self::from(*node),
+    }
+  }
+}
+
+/// What one kind of page draws instead of the document's own setting.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PageOverrideInput {
+  header: Option<BandInput>,
+  footer: Option<BandInput>,
+}
+
+impl From<PageOverrideInput> for PageOverride {
+  fn from(input: PageOverrideInput) -> Self {
+    Self {
+      header: input.header.map(Band::from),
+      footer: input.footer.map(Band::from),
+    }
+  }
+}
+
+/// Overrides keyed by the pages they cover.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PageRulesInput {
+  first: Option<PageOverrideInput>,
+  last: Option<PageOverrideInput>,
+  odd: Option<PageOverrideInput>,
+  even: Option<PageOverrideInput>,
+}
+
+impl From<PageRulesInput> for PageRules {
+  fn from(input: PageRulesInput) -> Self {
+    let rule = |rule: Option<PageOverrideInput>| rule.map(PageOverride::from).unwrap_or_default();
+
+    Self {
+      first: rule(input.first),
+      last: rule(input.last),
+      odd: rule(input.odd),
+      even: rule(input.even),
+    }
+  }
+}
+
+/// Splits the options into single-page viewport or paged geometry, rejecting
+/// a mix of both.
+pub(crate) fn resolve_geometry(
+  options: &PdfRenderOptions,
+) -> Result<(Option<Viewport>, Option<PageOptions>), js_sys::Error> {
+  let paged_field_set = options.size.is_some()
+    || options.landscape.is_some()
+    || options.margin.is_some()
+    || options.header.is_some()
+    || options.footer.is_some()
+    || options.pages.is_some()
+    || options.page_ranges.is_some();
+
+  match options.viewport {
+    Some(_) if paged_field_set => Err(js_sys::Error::new(
+      "viewport is mutually exclusive with the paged options (size, landscape, margin, header, footer, pages, pageRanges)",
+    )),
+    Some(input) => Ok((
+      Some(Viewport::new((
+        input.width as u32,
+        input.height.map(|height| height as u32),
+      ))),
+      None,
+    )),
+    None => Ok((
+      None,
+      Some(resolve_page(
+        options.size.as_ref(),
+        options.landscape.unwrap_or(false),
+        options.margin.as_ref(),
+      )?),
+    )),
+  }
+}

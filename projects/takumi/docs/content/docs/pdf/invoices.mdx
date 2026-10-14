@@ -1,0 +1,137 @@
+---
+title: Invoices
+description: Generate paginated PDF invoices with line items, totals, page numbers, and optional embedded XML.
+icon: Receipt
+---
+
+Render line items and totals as a paged document. If your invoice format requires embedded XML, add it as an attachment with the required PDF/A and XMP settings.
+
+## A plain invoice
+
+In this example, `invoice` is your invoice data and `InvoiceDocument` is your JSX template. For a complete implementation, see the [invoice example](https://github.com/kane50613/takumi/tree/master/example/generate-invoice).
+
+Line items flow across pages. A footer carries the page counter. `measure` returns the footer's height so you can reserve enough bottom margin:
+
+```tsx twoslash title="Reserve space for an invoice footer"
+import type { ReactNode } from "react";
+declare const invoice: { number: string };
+declare function InvoiceDocument(props: { data: typeof invoice }): ReactNode;
+// ---cut---
+import { googleFonts } from "@takumi-rs/helpers";
+import { measure, render } from "takumi-pdf";
+import { PageNumber, TotalPages } from "takumi-pdf/primitives";
+
+const footer = (
+  <div tw="flex w-full justify-between px-12 text-[10px] text-[#6b7280]">
+    <span>Invoice {invoice.number}</span>
+    <span tw="flex">
+      Page <PageNumber /> of <TotalPages />
+    </span>
+  </div>
+);
+
+const fonts = await googleFonts(["Inter"]);
+// [!code highlight]
+const { height } = await measure(footer, { size: "a4", fonts });
+
+const pdf = await render(<InvoiceDocument data={invoice} />, {
+  size: "a4",
+  // [!code highlight]
+  margin: { top: 48, bottom: height + 32, left: 48, right: 48 },
+  footer,
+  fonts,
+});
+```
+
+Use `break-inside: avoid` to keep a line item together when it fits on a page. In Tailwind, use `break-inside-avoid`:
+
+```tsx twoslash title="Keep a line item together"
+declare const item: { description: string; amount: string };
+// ---cut---
+import "takumi-pdf";
+
+// [!code highlight]
+<div tw="flex break-inside-avoid gap-3 pt-3 text-xs">
+  <span tw="flex-1">{item.description}</span>
+  <span tw="w-[100px] text-right">{item.amount}</span>
+</div>;
+```
+
+Apply the same style to the totals block.
+
+## Electronic invoices
+
+Factur-X and ZUGFeRD combine a readable PDF invoice with structured XML. Configure the container for the profile you are implementing:
+
+| The standard requires        | The option         |
+| ---------------------------- | ------------------ |
+| A PDF/A-3 container          | `pdfa: "3b"`       |
+| The XML attached by name     | `attachments`      |
+| An `fx:` XMP block           | `metadata.xmp`     |
+| A modification date per file | `modificationDate` |
+| Embedded subset fonts        | always on          |
+
+Each attachment's `modificationDate` falls back to `metadata.creationDate`. Setting the document date once covers both.
+
+```tsx twoslash title="Attach invoice XML"
+import type { ReactNode } from "react";
+import type { XmpSchema } from "takumi-pdf";
+declare const invoice: ReactNode;
+declare const xml: string;
+declare const facturXmp: XmpSchema;
+// ---cut---
+import { render } from "takumi-pdf";
+
+const pdf = await render(invoice, {
+  lang: "en",
+  // [!code highlight:2]
+  pdfa: "3b",
+  tagged: "ua1",
+  metadata: {
+    title: "Invoice INV-2026-0042",
+    creationDate: "2026-08-06",
+    // [!code highlight]
+    xmp: [facturXmp],
+  },
+  attachments: [
+    {
+      name: "factur-x.xml",
+      data: xml,
+      mimeType: "text/xml",
+      description: "Factur-X 1.0 MINIMUM invoice data",
+      relationship: "data",
+    },
+  ],
+});
+```
+
+The renderer checks PDF conformance while writing. It does not validate invoice XML, tax rules, or acceptance by a receiving system.
+
+Takumi does not build the invoice XML. Use a library for the profile, or emit the elements the profile lists. The [e-invoice example](https://github.com/kane50613/takumi/tree/master/example/e-invoice) writes a MINIMUM profile by hand.
+
+### Validating the result
+
+Two validators cover the two halves. Both need Java.
+
+[veraPDF](https://verapdf.org) checks the container:
+
+```bash title="Validate PDF/A and PDF/UA"
+verapdf --flavour 3b --format text invoice.pdf
+verapdf --flavour ua1 --format text invoice.pdf
+```
+
+[Mustang](https://www.mustangproject.org) checks the Factur-X half, both the XML and the packaging:
+
+```bash title="Validate Factur-X with Mustang"
+java -jar Mustang-CLI.jar --action validate --source invoice.pdf
+```
+
+Mustang finds the profile through the `fx:` XMP block. Takumi writes the values and the schema description PDF/A demands, so the two cannot drift. It does not check the values: a wrong profile name surfaces in Mustang, not at render time.
+
+## Accessible invoices
+
+For PDF/UA-1 output, set `tagged: "ua1"` and supply the required metadata. Review the reading order and table semantics as well. See [PDF/A and PDF/UA](/docs/pdf/pdf-a).
+
+## Reproducible bytes
+
+Use a fixed `metadata.creationDate` with the same content, resources, and renderer version when you need reproducible bytes. A new date changes the file even if the invoice looks the same.

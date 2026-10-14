@@ -1,0 +1,61 @@
+use std::hint::black_box;
+
+use criterion::{Criterion, criterion_group, criterion_main};
+use takumi::{
+  prelude::{Fonts, Node, OutputFormat, Quality, RenderOptions, Viewport},
+  render, write_image,
+};
+
+mod common;
+
+const BENCH_WIDTH: u32 = 1200;
+const BENCH_HEIGHT: u32 = 630;
+const IMAGE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/images/yeecord.png");
+
+fn bench_encode(c: &mut Criterion) {
+  let fonts = Fonts::default();
+  let node =
+    Node::container([Node::image(IMAGE_PATH).with_tw("flex w-full h-full".parse().unwrap())])
+      .with_tw("flex w-full h-full bg-white".parse().unwrap());
+  let image = render(
+    RenderOptions::builder()
+      .viewport(Viewport::new((BENCH_WIDTH, BENCH_HEIGHT)))
+      .node(node)
+      .fonts(&fonts)
+      .build(),
+  )
+  .unwrap();
+
+  let mut group = c.benchmark_group("encode");
+  for (name, format) in [
+    ("png", OutputFormat::Png),
+    (
+      "webp",
+      OutputFormat::WebP {
+        quality: Quality::default(),
+      },
+    ),
+    (
+      "jpeg",
+      OutputFormat::Jpeg {
+        quality: Quality::default(),
+      },
+    ),
+  ] {
+    group.bench_function(name, |b| {
+      b.iter(|| {
+        let mut buf = Vec::with_capacity(1 << 20);
+        write_image(&image, &mut buf, format).unwrap();
+        black_box(buf.len())
+      })
+    });
+  }
+  group.finish();
+}
+
+criterion_group! {
+  name = benches;
+  config = common::criterion();
+  targets = bench_encode
+}
+criterion_main!(benches);

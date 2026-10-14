@@ -1,0 +1,674 @@
+use std::array;
+
+use image::Rgba;
+use tiny_skia::PremultipliedColorU8;
+
+use crate::{div_255, mul_div_255, resources::image_buffer::premultiply_pixel, style::BlendMode};
+
+#[inline(always)]
+fn composited_alpha(bottom_alpha: u8, top_alpha: u8) -> u32 {
+  u32::from(top_alpha) + u32::from(bottom_alpha) - u32::from(mul_div_255(bottom_alpha, top_alpha))
+}
+
+#[inline(always)]
+fn blend_plus_lighter(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
+  let result_alpha = top.0[3].saturating_add(bottom.0[3]);
+  if result_alpha == 0 {
+    return;
+  }
+
+  for i in 0..3 {
+    let top_premul = mul_div_255(top.0[i], top.0[3]);
+    let bottom_premul = mul_div_255(bottom.0[i], bottom.0[3]);
+    bottom.0[i] = top_premul.saturating_add(bottom_premul);
+  }
+
+  bottom.0[3] = result_alpha;
+}
+
+pub(crate) fn blend_pixel(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
+  if top.0[3] == 0 {
+    return;
+  }
+
+  let top_alpha = top.0[3];
+  let bottom_alpha = bottom.0[3];
+
+  if bottom_alpha == 0 {
+    *bottom = top;
+    return;
+  }
+
+  match mode {
+    BlendMode::Normal => {
+      if top_alpha == 255 {
+        *bottom = top;
+        return;
+      }
+
+      if bottom_alpha == 255 {
+        let inverse_alpha = 255 - top_alpha;
+
+        for i in 0..3 {
+          bottom.0[i] = div_255(
+            u16::from(top[i]) * u16::from(top_alpha)
+              + u16::from(bottom[i]) * u16::from(inverse_alpha),
+          );
+        }
+      } else {
+        blend_normal_partial_transparency(bottom, top);
+      }
+    }
+    BlendMode::PlusLighter => {
+      blend_plus_lighter(bottom, top);
+    }
+    BlendMode::PlusDarker => {
+      blend_with_float(bottom, top, mode);
+    }
+    BlendMode::Multiply
+    | BlendMode::Screen
+    | BlendMode::Darken
+    | BlendMode::Lighten
+    | BlendMode::ColorDodge
+    | BlendMode::ColorBurn
+    | BlendMode::Difference
+    | BlendMode::Exclusion => {
+      blend_with_integer(bottom, top, mode);
+    }
+    _ => {
+      blend_with_float(bottom, top, mode);
+    }
+  }
+}
+
+#[inline(always)]
+fn blend_normal_partial_transparency(bottom: &mut Rgba<u8>, top: Rgba<u8>) {
+  let top_alpha = top.0[3] as u32;
+  let bottom_alpha = bottom.0[3] as u32;
+
+  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
+
+  if result_alpha == 0 {
+    return;
+  }
+
+  let inverse_top_alpha = 255 - top_alpha;
+
+  for i in 0..3 {
+    let top_premul = top.0[i] as u32 * top_alpha;
+    let bottom_premul = bottom.0[i] as u32 * bottom_alpha;
+    let result_premul = top_premul + ((bottom_premul * inverse_top_alpha + 127) / 255);
+
+    bottom.0[i] = ((result_premul + result_alpha / 2) / result_alpha).min(255) as u8;
+  }
+
+  bottom.0[3] = result_alpha.min(255) as u8;
+}
+
+#[inline(always)]
+fn blend_with_integer(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
+  let bottom_alpha = bottom.0[3] as u32;
+  let top_alpha = top.0[3] as u32;
+  let result_alpha = composited_alpha(bottom.0[3], top.0[3]);
+
+  if result_alpha == 0 {
+    return;
+  }
+  const ROUNDING_OFFSET: u32 = 32512;
+  const ALPHA_DIVISOR: u32 = 65025;
+  const MAX_ALPHA: u32 = u8::MAX as u32;
+
+  for i in 0..3 {
+    let b = bottom.0[i];
+    let t = top.0[i];
+    let blended = blend_channel_integer(mode, b, t) as u32;
+    let composited = ((MAX_ALPHA - top_alpha) * bottom_alpha * b as u32
+      + (MAX_ALPHA - bottom_alpha) * top_alpha * t as u32
+      + top_alpha * bottom_alpha * blended
+      + ROUNDING_OFFSET)
+      / ALPHA_DIVISOR;
+    bottom.0[i] = ((composited * 255 + result_alpha / 2) / result_alpha).min(255) as u8;
+  }
+
+  bottom.0[3] = result_alpha.min(255) as u8;
+}
+
+#[inline(always)]
+fn blend_channel_integer(mode: BlendMode, bottom: u8, top: u8) -> u8 {
+  match mode {
+    BlendMode::Multiply => mul_div_255(top, bottom),
+    BlendMode::Screen => 255 - mul_div_255(255 - top, 255 - bottom),
+    BlendMode::Darken => top.min(bottom),
+    BlendMode::Lighten => top.max(bottom),
+    BlendMode::ColorDodge => color_dodge_integer(bottom, top),
+    BlendMode::ColorBurn => color_burn_integer(bottom, top),
+    BlendMode::Difference => top.abs_diff(bottom),
+    BlendMode::Exclusion => {
+      (u32::from(bottom) + u32::from(top) - 2 * u32::from(mul_div_255(bottom, top))).min(255) as u8
+    }
+    _ => top,
+  }
+}
+
+#[inline(always)]
+fn color_dodge_integer(bottom: u8, top: u8) -> u8 {
+  if bottom == 0 {
+    return 0;
+  }
+
+  if top == u8::MAX {
+    return u8::MAX;
+  }
+
+  let bottom = u32::from(bottom);
+  let top = u32::from(top);
+  let max = u32::from(u8::MAX);
+
+  if bottom + top >= max {
+    return u8::MAX;
+  }
+
+  let denominator = max - top;
+  ((bottom * max + denominator / 2) / denominator) as u8
+}
+
+#[inline(always)]
+fn color_burn_integer(bottom: u8, top: u8) -> u8 {
+  if bottom == u8::MAX {
+    return u8::MAX;
+  }
+
+  if top == 0 {
+    return 0;
+  }
+
+  let bottom = u32::from(bottom);
+  let top = u32::from(top);
+  let max = u32::from(u8::MAX);
+
+  if bottom + top <= max {
+    return 0;
+  }
+
+  let numerator = (bottom + top - max) * max;
+  ((numerator + top / 2) / top) as u8
+}
+
+#[inline(always)]
+fn blend_with_float(bottom: &mut Rgba<u8>, top: Rgba<u8>, mode: BlendMode) {
+  let top_normalized = normalize_rgba(top);
+  let bottom_normalized = normalize_rgba(*bottom);
+
+  let result_alpha = top_normalized.alpha + bottom_normalized.alpha * (1.0 - top_normalized.alpha);
+
+  if result_alpha <= 0.0 {
+    bottom.0 = [0; 4];
+    return;
+  }
+
+  let blended = compute_blend_float(mode, &bottom_normalized, &top_normalized);
+  let composited = composite_float(&bottom_normalized, &top_normalized, &blended);
+
+  for (pixel, composited_pixel) in bottom.0.iter_mut().zip(composited.iter()) {
+    *pixel = (composited_pixel / result_alpha * 255.0)
+      .round()
+      .clamp(0.0, 255.0) as u8;
+  }
+
+  bottom.0[3] = (result_alpha * 255.0).round() as u8;
+}
+
+#[derive(Copy, Clone)]
+struct NormalizedColor {
+  channels: [f32; 3],
+  alpha: f32,
+}
+
+impl NormalizedColor {
+  #[inline(always)]
+  fn red(&self) -> f32 {
+    self.channels[0]
+  }
+
+  #[inline(always)]
+  fn green(&self) -> f32 {
+    self.channels[1]
+  }
+
+  #[inline(always)]
+  fn blue(&self) -> f32 {
+    self.channels[2]
+  }
+}
+
+#[inline(always)]
+fn normalize_rgba(color: Rgba<u8>) -> NormalizedColor {
+  const INV_255: f32 = 1.0 / 255.0;
+  let [r, g, b, a] = color.0;
+  NormalizedColor {
+    channels: [r as f32 * INV_255, g as f32 * INV_255, b as f32 * INV_255],
+    alpha: a as f32 * INV_255,
+  }
+}
+
+#[inline(always)]
+fn compute_blend_float(
+  mode: BlendMode,
+  bottom: &NormalizedColor,
+  top: &NormalizedColor,
+) -> [f32; 3] {
+  match mode {
+    BlendMode::Overlay => [
+      overlay(bottom.red(), top.red()),
+      overlay(bottom.green(), top.green()),
+      overlay(bottom.blue(), top.blue()),
+    ],
+    BlendMode::ColorDodge => [
+      color_dodge(bottom.red(), top.red()),
+      color_dodge(bottom.green(), top.green()),
+      color_dodge(bottom.blue(), top.blue()),
+    ],
+    BlendMode::ColorBurn => [
+      color_burn(bottom.red(), top.red()),
+      color_burn(bottom.green(), top.green()),
+      color_burn(bottom.blue(), top.blue()),
+    ],
+    BlendMode::HardLight => [
+      overlay(top.red(), bottom.red()),
+      overlay(top.green(), bottom.green()),
+      overlay(top.blue(), bottom.blue()),
+    ],
+    BlendMode::SoftLight => [
+      soft_light(bottom.red(), top.red()),
+      soft_light(bottom.green(), top.green()),
+      soft_light(bottom.blue(), top.blue()),
+    ],
+    BlendMode::Hue => {
+      let color = set_sat(top.channels, sat(bottom.channels));
+      set_lum(color, lum(bottom.channels))
+    }
+    BlendMode::Saturation => {
+      let color = set_sat(bottom.channels, sat(top.channels));
+      set_lum(color, lum(bottom.channels))
+    }
+    BlendMode::Color => set_lum(top.channels, lum(bottom.channels)),
+    BlendMode::Luminosity => set_lum(bottom.channels, lum(top.channels)),
+    BlendMode::PlusDarker => [
+      (bottom.red() + top.red() - 1.0).max(0.0),
+      (bottom.green() + top.green() - 1.0).max(0.0),
+      (bottom.blue() + top.blue() - 1.0).max(0.0),
+    ],
+    _ => top.channels,
+  }
+}
+
+#[inline(always)]
+fn composite_float(
+  bottom: &NormalizedColor,
+  top: &NormalizedColor,
+  blended: &[f32; 3],
+) -> [f32; 3] {
+  let inv_top_alpha = 1.0 - top.alpha;
+  let inv_bottom_alpha = 1.0 - bottom.alpha;
+  let alpha_product = top.alpha * bottom.alpha;
+
+  let mut result = [0.0; 3];
+  for i in 0..3 {
+    result[i] = inv_top_alpha * bottom.alpha * bottom.channels[i]
+      + inv_bottom_alpha * top.alpha * top.channels[i]
+      + alpha_product * blended[i];
+  }
+  result
+}
+
+fn overlay(bottom: f32, top: f32) -> f32 {
+  if bottom <= 0.5 {
+    2.0 * bottom * top
+  } else {
+    1.0 - 2.0 * (1.0 - bottom) * (1.0 - top)
+  }
+}
+
+fn color_dodge(bottom: f32, top: f32) -> f32 {
+  if bottom == 0.0 {
+    0.0
+  } else if top >= 1.0 {
+    1.0
+  } else {
+    (bottom / (1.0 - top)).min(1.0)
+  }
+}
+
+fn color_burn(bottom: f32, top: f32) -> f32 {
+  if bottom >= 1.0 {
+    1.0
+  } else if top <= 0.0 {
+    0.0
+  } else {
+    1.0 - ((1.0 - bottom) / top).min(1.0)
+  }
+}
+
+fn soft_light(bottom: f32, top: f32) -> f32 {
+  if top <= 0.5 {
+    bottom - (1.0 - 2.0 * top) * bottom * (1.0 - bottom)
+  } else {
+    let delta = if bottom <= 0.25 {
+      ((16.0 * bottom - 12.0) * bottom + 4.0) * bottom
+    } else {
+      bottom.sqrt()
+    };
+    bottom + (2.0 * top - 1.0) * (delta - bottom)
+  }
+}
+
+fn lum(color: [f32; 3]) -> f32 {
+  0.3 * color[0] + 0.59 * color[1] + 0.11 * color[2]
+}
+
+fn set_lum(mut color: [f32; 3], luminosity: f32) -> [f32; 3] {
+  let delta = luminosity - lum(color);
+  color[0] += delta;
+  color[1] += delta;
+  color[2] += delta;
+  clip_color(color)
+}
+
+fn clip_color(mut color: [f32; 3]) -> [f32; 3] {
+  let luminosity = lum(color);
+  let min_channel = color[0].min(color[1]).min(color[2]);
+  let max_channel = color[0].max(color[1]).max(color[2]);
+
+  if min_channel < 0.0 && (luminosity - min_channel).abs() > f32::EPSILON {
+    for channel in color.iter_mut() {
+      *channel = luminosity + (((*channel - luminosity) * luminosity) / (luminosity - min_channel));
+    }
+  }
+
+  if max_channel > 1.0 && (max_channel - luminosity).abs() > f32::EPSILON {
+    for channel in color.iter_mut() {
+      *channel =
+        luminosity + (((*channel - luminosity) * (1.0 - luminosity)) / (max_channel - luminosity));
+    }
+  }
+
+  color
+}
+
+fn sat(color: [f32; 3]) -> f32 {
+  color[0].max(color[1]).max(color[2]) - color[0].min(color[1]).min(color[2])
+}
+
+fn set_sat(mut color: [f32; 3], saturation: f32) -> [f32; 3] {
+  let mut indices = [0, 1, 2];
+  indices.sort_by(|&i, &j| color[i].total_cmp(&color[j]));
+
+  let min_idx = indices[0];
+  let mid_idx = indices[1];
+  let max_idx = indices[2];
+
+  if color[max_idx] > color[min_idx] {
+    color[mid_idx] =
+      ((color[mid_idx] - color[min_idx]) * saturation) / (color[max_idx] - color[min_idx]);
+    color[max_idx] = saturation;
+  } else {
+    color[mid_idx] = 0.0;
+    color[max_idx] = 0.0;
+  }
+  color[min_idx] = 0.0;
+  color
+}
+
+const DEMUL: [f32; 256] = {
+  let mut t = [0.0f32; 256];
+  let mut i = 1usize;
+  while i < 256 {
+    t[i] = 255.0 / i as f32;
+    i += 1;
+  }
+  t
+};
+
+#[inline(always)]
+pub(crate) fn premultiplied_from_pixel(pixel: PremultipliedColorU8) -> [u8; 4] {
+  [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+}
+
+/// `pixel` scaled by `alpha`, without a branch so a loop over pixels vectorizes.
+#[inline(always)]
+pub(crate) fn scale_premultiplied_pixel(pixel: [u8; 4], alpha: u8) -> [u8; 4] {
+  pixel.map(|channel| mul_div_255(channel, alpha))
+}
+
+/// [`composite_premultiplied_over`] for each pixel of `src` over `dst`, for every input, with
+/// selects instead of branches so it vectorizes.
+#[inline(always)]
+pub(crate) fn composite_premultiplied_over_row(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
+  for (dst, &src) in dst.iter_mut().zip(src) {
+    let inverse = u8::MAX - src[3];
+    let over = array::from_fn(|lane| src[lane].saturating_add(mul_div_255(dst[lane], inverse)));
+
+    *dst = if src[3] == 0 {
+      *dst
+    } else if dst[3] == 0 {
+      src
+    } else {
+      over
+    };
+  }
+}
+
+#[inline(always)]
+pub(crate) fn composite_premultiplied_over(dst: &mut [u8; 4], src: [u8; 4]) {
+  let src_alpha = src[3];
+  if src_alpha == 0 {
+    return;
+  }
+
+  let dst_alpha = dst[3];
+  if src_alpha == u8::MAX || dst_alpha == 0 {
+    *dst = src;
+    return;
+  }
+
+  let inverse_alpha = u8::MAX - src_alpha;
+  dst[0] = src[0].saturating_add(mul_div_255(dst[0], inverse_alpha));
+  dst[1] = src[1].saturating_add(mul_div_255(dst[1], inverse_alpha));
+  dst[2] = src[2].saturating_add(mul_div_255(dst[2], inverse_alpha));
+  dst[3] = src_alpha.saturating_add(mul_div_255(dst_alpha, inverse_alpha));
+}
+
+#[inline(always)]
+pub(crate) fn blend_premultiplied_pixel(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
+  if src[3] == 0 {
+    return;
+  }
+
+  if mode == BlendMode::Normal {
+    composite_premultiplied_over(dst, src);
+    return;
+  }
+
+  blend_premultiplied_pixel_slow(dst, src, mode);
+}
+
+// Outlined so per-pixel loops only inline the normal-mode fast path; keeps one
+// copy of the non-normal blend machinery in the binary (wasm size).
+#[inline(never)]
+fn blend_premultiplied_pixel_slow(dst: &mut [u8; 4], src: [u8; 4], mode: BlendMode) {
+  if src[3] == u8::MAX && dst[3] == u8::MAX {
+    let mut current = Rgba(*dst);
+    let color = Rgba(src);
+    blend_pixel(&mut current, color, mode);
+    *dst = current.0;
+    return;
+  }
+
+  let mut current = demultiplied(*dst);
+
+  blend_pixel(&mut current, demultiplied(src), mode);
+  *dst = premultiply_pixel(current.0);
+}
+
+/// Straight alpha from a premultiplied pixel, through the `DEMUL` reciprocal table.
+#[inline(always)]
+fn demultiplied([red, green, blue, alpha]: [u8; 4]) -> Rgba<u8> {
+  match alpha {
+    0 => Rgba([0, 0, 0, 0]),
+    u8::MAX => Rgba([red, green, blue, alpha]),
+    _ => {
+      let inverse = DEMUL[alpha as usize];
+      let scale = |channel: u8| (channel as f32 * inverse + 0.5) as u8;
+
+      Rgba([scale(red), scale(green), scale(blue), alpha])
+    }
+  }
+}
+
+#[inline(always)]
+pub(crate) fn blend_premultiplied_pixel_normal(dst: &mut [u8], src: PremultipliedColorU8) {
+  let src_a = src.alpha();
+  if src_a == 0 {
+    return;
+  }
+
+  if src_a == u8::MAX {
+    dst[0] = src.red();
+    dst[1] = src.green();
+    dst[2] = src.blue();
+    dst[3] = src_a;
+    return;
+  }
+
+  let inv_src_a = u8::MAX - src_a;
+  dst[0] = src.red().saturating_add(mul_div_255(dst[0], inv_src_a));
+  dst[1] = src.green().saturating_add(mul_div_255(dst[1], inv_src_a));
+  dst[2] = src.blue().saturating_add(mul_div_255(dst[2], inv_src_a));
+  dst[3] = src_a.saturating_add(mul_div_255(dst[3], inv_src_a));
+}
+
+pub(crate) fn composite_premultiplied_over_span(dst: &mut [u8], pixels: &[PremultipliedColorU8]) {
+  for (dst_pixel, src_pixel) in dst.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
+    let src_a = src_pixel.alpha();
+    let inv_src_a = u8::MAX - src_a;
+    dst_pixel[0] = src_pixel
+      .red()
+      .saturating_add(mul_div_255(dst_pixel[0], inv_src_a));
+    dst_pixel[1] = src_pixel
+      .green()
+      .saturating_add(mul_div_255(dst_pixel[1], inv_src_a));
+    dst_pixel[2] = src_pixel
+      .blue()
+      .saturating_add(mul_div_255(dst_pixel[2], inv_src_a));
+    dst_pixel[3] = src_a.saturating_add(mul_div_255(dst_pixel[3], inv_src_a));
+  }
+}
+
+pub(crate) fn fill_repeated_premultiplied_pixel(dst: &mut [u8], pixel: [u8; 4]) {
+  bytemuck::cast_slice_mut::<u8, [u8; 4]>(dst).fill(pixel);
+}
+
+pub(crate) fn blend_repeated_premultiplied_pixel(dst: &mut [u8], pixel: PremultipliedColorU8) {
+  for dst_pixel in dst.as_chunks_mut::<4>().0 {
+    blend_premultiplied_pixel_normal(dst_pixel, pixel);
+  }
+}
+
+pub(crate) fn composite_repeated_premultiplied_pixel_normal(
+  dst: &mut [u8],
+  pixel: PremultipliedColorU8,
+) {
+  let alpha = pixel.alpha();
+  if alpha == 0 {
+    return;
+  }
+
+  if alpha == u8::MAX {
+    fill_repeated_premultiplied_pixel(
+      dst,
+      [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()],
+    );
+  } else {
+    blend_repeated_premultiplied_pixel(dst, pixel);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use image::Rgba;
+
+  use crate::{
+    blend::{blend_pixel, composite_premultiplied_over, composite_premultiplied_over_row},
+    style::BlendMode,
+  };
+
+  #[test]
+  fn the_row_compositor_matches_the_pixel_one_for_every_input() {
+    let samples = [0, 1, 2, 77, 128, 200, 254, 255];
+
+    for src_alpha in 0..=u8::MAX {
+      for dst_alpha in 0..=u8::MAX {
+        for &src_red in &samples {
+          for &dst_red in &samples {
+            let src = [src_red, src_alpha / 2, 255, src_alpha];
+            let mut expected = [dst_red, dst_alpha / 3, 0, dst_alpha];
+            let mut actual = [expected];
+
+            composite_premultiplied_over(&mut expected, src);
+            composite_premultiplied_over_row(&mut actual, &[src]);
+            assert_eq!(
+              actual[0],
+              expected,
+              "{src:?} over {:?}",
+              [dst_red, dst_alpha]
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // https://github.com/kane50613/takumi/issues/447
+  #[test]
+  fn plus_lighter_issue_447() {
+    let mut bottom = Rgba([0xF5, 0xB1, 0x2D, 0xFF]);
+    let top = Rgba([0xFF, 0xFF, 0xFF, 0x7F]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusLighter);
+
+    assert_eq!(bottom, Rgba([0xFF, 0xFF, 0xAC, 0xFF]));
+  }
+
+  // https://github.com/kane50613/takumi/issues/501
+  #[test]
+  fn plus_darker_issue_501() {
+    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
+    let top = Rgba([0xFF, 0xFF, 0xFF, 0xFF]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
+
+    assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
+  }
+
+  // https://github.com/kane50613/takumi/issues/643
+  #[test]
+  fn plus_darker_preserves_opaque_backdrop_under_partial_white() {
+    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
+    let top = Rgba([0xFF, 0xFF, 0xFF, 0x7F]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
+
+    assert_eq!(bottom, Rgba([0x96, 0x77, 0x00, 0xFF]));
+  }
+
+  // https://github.com/kane50613/takumi/issues/643
+  #[test]
+  fn plus_darker_with_low_opacity_black_stays_faint() {
+    let mut bottom = Rgba([0x96, 0x77, 0x00, 0xFF]);
+    let top = Rgba([0x00, 0x00, 0x00, 0x1A]);
+
+    blend_pixel(&mut bottom, top, BlendMode::PlusDarker);
+
+    assert_eq!(bottom, Rgba([0x87, 0x6B, 0x00, 0xFF]));
+  }
+}

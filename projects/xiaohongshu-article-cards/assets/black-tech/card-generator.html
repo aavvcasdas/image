@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>黑白科技卡模板</title>
+  <style>
+    :root {
+      --black: #050505;
+      --panel: #101010;
+      --white: #f5f5f3;
+      --muted: #a8a8a3;
+      --line: #30302e;
+      --accent: #d9ff43;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #777; }
+    body {
+      display: grid;
+      gap: 32px;
+      padding: 32px;
+      justify-content: center;
+      color: var(--white);
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    }
+
+    .card {
+      position: relative;
+      width: 1080px;
+      height: 1440px;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        var(--black);
+      background-size: 54px 54px;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 22px;
+      border: 1px solid rgba(255,255,255,.14);
+    }
+    .topbar, .footer {
+      position: absolute;
+      left: 74px;
+      right: 74px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font: 18px Consolas, monospace;
+      letter-spacing: .07em;
+    }
+    .topbar { top: 58px; }
+    .footer { bottom: 58px; }
+    .status { display: flex; align-items: center; gap: 10px; }
+    .status::before {
+      content: "";
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 18px rgba(217,255,67,.7);
+    }
+    .content {
+      position: absolute;
+      inset: 142px 74px 116px;
+      display: flex;
+      flex-direction: column;
+    }
+    .kicker {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 30px;
+      color: var(--accent);
+      font-size: 25px;
+      font-weight: 800;
+      letter-spacing: .1em;
+    }
+    .kicker::after { content: ""; height: 2px; flex: 1; background: var(--accent); }
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      max-width: 900px;
+      font-size: 112px;
+      line-height: 1;
+      letter-spacing: -.055em;
+      font-weight: 950;
+    }
+    h1 span { color: transparent; -webkit-text-stroke: 2px var(--white); }
+    .lead {
+      margin-top: 34px;
+      max-width: 850px;
+      font-size: 40px;
+      line-height: 1.4;
+      font-weight: 760;
+    }
+    mark { padding: 0 .12em; color: var(--black); background: var(--accent); }
+    .metric {
+      margin-top: 48px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      color: var(--black);
+      background: var(--white);
+      border: 1px solid var(--white);
+    }
+    .metric > div { padding: 28px 30px; }
+    .metric > div + div { border-left: 1px solid var(--black); }
+    .metric strong { display: block; font-size: 54px; line-height: 1.05; }
+    .metric small { display: block; margin-top: 8px; font-size: 20px; font-weight: 700; }
+    .flow {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: 1fr 58px 1fr 58px 1fr;
+      align-items: center;
+    }
+    .node { padding: 22px; border: 1px solid var(--line); background: var(--panel); }
+    .node:last-child { border-color: var(--accent); }
+    .node small { color: var(--muted); font: 15px Consolas, monospace; }
+    .node strong { display: block; margin-top: 8px; font-size: 25px; }
+    .arrow { text-align: center; color: var(--accent); font: 30px Consolas, monospace; }
+    .detail-panel {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--line);
+      background: rgba(12,12,12,.94);
+    }
+    .detail-panel > div { min-height: 224px; padding: 28px 24px; }
+    .detail-panel > div + div { border-left: 1px solid var(--line); }
+    .detail-panel small { color: var(--muted); font: 15px Consolas, monospace; }
+    .detail-panel strong { display: block; margin-top: 12px; font-size: 24px; line-height: 1.35; }
+
+    .page-title {
+      font-size: 78px;
+      line-height: 1.05;
+      letter-spacing: -.05em;
+      font-weight: 950;
+    }
+    .page-title span { color: var(--accent); }
+    .intro { margin-top: 18px; color: var(--muted); font-size: 25px; line-height: 1.5; }
+    .list { margin-top: 38px; display: grid; gap: 18px; }
+    .item {
+      display: grid;
+      grid-template-columns: 108px 1fr;
+      min-height: 225px;
+      border: 1px solid var(--line);
+      background: rgba(12,12,12,.94);
+    }
+    .index {
+      padding-top: 30px;
+      text-align: center;
+      border-right: 1px solid var(--line);
+      color: var(--accent);
+      font-size: 38px;
+      font-weight: 900;
+    }
+    .item-body { padding: 28px 30px; }
+    .item h3 { font-size: 34px; }
+    .chips { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip { padding: 10px 15px; border: 1px solid #40403d; font-size: 21px; font-weight: 650; }
+    .chip.emphasis { border-color: var(--accent); color: var(--accent); }
+    .summary {
+      margin-top: 24px;
+      padding: 22px 24px;
+      border-left: 5px solid var(--accent);
+      background: #171714;
+      font-size: 23px;
+      line-height: 1.45;
+      font-weight: 750;
+    }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="topbar"><span class="status">TOPIC / STATUS</span><span>01 / 02</span></div>
+    <main class="content" data-card-content>
+      <div class="kicker">CATEGORY × KEYWORD</div>
+      <h1>这里填写<br><span>封面标题</span></h1>
+      <p class="lead">一句话说明读者收益，使用<mark>高亮关键词</mark>。</p>
+      <div class="metric">
+        <div><strong>关键数字</strong><small>单位与口径</small></div>
+        <div><strong>重要限制</strong><small>适用范围</small></div>
+      </div>
+      <div class="flow">
+        <div class="node"><small>01 / INPUT</small><strong>对象 A</strong></div>
+        <div class="arrow">→</div>
+        <div class="node"><small>02 / ACTION</small><strong>动作 B</strong></div>
+        <div class="arrow">→</div>
+        <div class="node"><small>03 / RESULT</small><strong>结果 C</strong></div>
+      </div>
+      <div class="detail-panel" data-content-end>
+        <div><small>AUDIENCE</small><strong>适用对象或使用场景</strong></div>
+        <div><small>REQUIREMENT</small><strong>必要前提或限制条件</strong></div>
+        <div><small>TAKEAWAY</small><strong>一句结论或行动建议</strong></div>
+      </div>
+    </main>
+    <footer class="footer" data-card-footer><span>说明或授权范围</span><span>SWIPE →</span></footer>
+  </section>
+
+  <section class="card">
+    <div class="topbar"><span class="status">CAPABILITY MAP</span><span>02 / 02</span></div>
+    <main class="content" data-card-content>
+      <h2 class="page-title">能力、清单或<span>步骤</span></h2>
+      <p class="intro">用一句话解释这一页的信息范围，不添加材料之外的结论。</p>
+      <div class="list">
+        <article class="item"><div class="index">01</div><div class="item-body"><h3>第一组信息</h3><div class="chips"><span class="chip emphasis">重点条目</span><span class="chip">并列条目</span><span class="chip">必要限制</span></div></div></article>
+        <article class="item"><div class="index">02</div><div class="item-body"><h3>第二组信息</h3><div class="chips"><span class="chip emphasis">重点条目</span><span class="chip">并列条目</span><span class="chip">适用场景</span></div></div></article>
+        <article class="item"><div class="index">03</div><div class="item-body"><h3>第三组信息</h3><div class="chips"><span class="chip emphasis">重点条目</span><span class="chip">并列条目</span><span class="chip">结论或结果</span></div></div></article>
+      </div>
+      <div class="summary" data-content-end>用一句话收束本页，保留材料中的限制或下一步行动。</div>
+    </main>
+    <footer class="footer" data-card-footer><span>BLACK TECH CARDS</span><span>DONE ✓</span></footer>
+  </section>
+</body>
+</html>

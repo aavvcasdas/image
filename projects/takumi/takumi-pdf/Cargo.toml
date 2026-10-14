@@ -1,0 +1,84 @@
+[package]
+name = "takumi-pdf"
+version = "0.16.2"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Vector PDF output backend for takumi. Emits selectable, searchable text with embedded subset fonts."
+repository = "https://github.com/kane50613/takumi"
+rust-version = "1.91"
+publish = false
+
+[features]
+default = ["images", "svg"]
+images = ["raster-images"]
+raster-images = [
+  "dep:png",
+  "dep:zune-jpeg",
+  "dep:gif",
+  "dep:image-webp",
+  "dep:imagesize",
+  "dep:crc32fast",
+]
+svg = ["takumi-core/svg"]
+
+[dependencies]
+typed-builder.workspace = true
+base64.workspace = true
+bumpalo.workspace = true
+flate2.workspace = true
+float-cmp.workspace = true
+indexmap.workspace = true
+pdf-writer.workspace = true
+rustc-hash.workspace = true
+siphasher.workspace = true
+skrifa.workspace = true
+kurbo.workspace = true
+write-fonts.workspace = true
+tiny-skia-path.workspace = true
+xmp-writer.workspace = true
+yoke.workspace = true
+
+[dependencies.crc32fast]
+workspace = true
+optional = true
+
+[dependencies.gif]
+workspace = true
+optional = true
+
+[dependencies.image-webp]
+workspace = true
+optional = true
+
+[dependencies.imagesize]
+workspace = true
+optional = true
+features = ["gif"]
+
+[dependencies.png]
+workspace = true
+optional = true
+
+[dependencies.smallvec]
+workspace = true
+features = ["union", "const_new", "write"]
+
+[dependencies.zune-jpeg]
+workspace = true
+optional = true
+
+[dependencies.takumi-core]
+path = "../takumi-core"
+default-features = false
+features = ["woff2", "png"]
+
+
+[lints]
+workspace = true
+
+[dev-dependencies.takumi-html]
+path = "../takumi-html"
+
+[dev-dependencies]
+flate2.workspace = true
+pretty_assertions.workspace = true

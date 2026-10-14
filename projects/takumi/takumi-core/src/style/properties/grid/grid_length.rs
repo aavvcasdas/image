@@ -1,0 +1,83 @@
+use std::fmt;
+
+use cssparser::{Parser, Token};
+use taffy::CompactLength;
+
+use crate::style::{
+  FromCss, Length, MakeComputed, ParseResult, SizingContext, ToCss, unexpected_token,
+};
+
+/// Represents a grid track sizing function
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub enum GridLength {
+  /// A fraction of the available space
+  Fr(f32),
+  /// A fixed length
+  Unit(Length),
+}
+
+impl GridLength {
+  pub(crate) fn to_compact_length(self, sizing: &SizingContext) -> CompactLength {
+    match self {
+      GridLength::Fr(fr) => CompactLength::fr(fr),
+      GridLength::Unit(unit) => unit.to_compact_length(sizing),
+    }
+  }
+}
+
+impl<'i> FromCss<'i> for GridLength {
+  fn from_css(input: &mut Parser<'i, '_>) -> ParseResult<'i, Self> {
+    if let Ok(unit) = input.try_parse(Length::from_css) {
+      return Ok(GridLength::Unit(unit));
+    }
+
+    let location = input.current_source_location();
+    let token = input.next()?;
+
+    let Token::Dimension { value, unit, .. } = &token else {
+      return Err(unexpected_token!(location, token));
+    };
+
+    if !unit.eq_ignore_ascii_case("fr") {
+      return Err(unexpected_token!(location, token));
+    }
+
+    Ok(GridLength::Fr(*value))
+  }
+
+  const VALID_TOKENS: &'static [&'static str] = Length::VALID_TOKENS;
+}
+
+impl MakeComputed for GridLength {
+  fn make_computed(&mut self, sizing: &SizingContext) {
+    if let GridLength::Unit(unit) = self {
+      unit.make_computed(sizing);
+    }
+  }
+}
+
+impl ToCss for GridLength {
+  fn to_css<W: fmt::Write>(&self, dest: &mut W) -> fmt::Result {
+    match self {
+      Self::Fr(fr) => write!(dest, "{fr}fr"),
+      Self::Unit(u) => u.to_css(dest),
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::style::FromCssStr;
+
+  #[test]
+  fn test_parse_fr_and_unit() {
+    assert_eq!(GridLength::from_css_str("1fr"), Ok(GridLength::Fr(1.0)));
+
+    assert_eq!(
+      GridLength::from_css_str("10px"),
+      Ok(GridLength::Unit(Length::Px(10.0)))
+    );
+  }
+}
