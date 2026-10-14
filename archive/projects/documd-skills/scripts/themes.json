@@ -1,0 +1,1130 @@
+{
+  "$comment": [
+    "Theme definitions for documd-visuals. Repo-only source of truth: `build-themes.mjs` renders",
+    "skills/documd-visuals/styles/themes/<id>.md from this file, and `--check` fails when a shipped",
+    "theme file drifts from it. Never hand-edit the shipped theme files.",
+    "",
+    "A theme assigns a *value* to every token the palette contract declares, and may narrow a token's",
+    "allowed uses where the theme's ground makes a use impossible — a family light enough to be a",
+    "pleasant band is too light to clear 4.5 as text or 3.0 as a line on any light page. Uses are",
+    "never widened. Every theme's ground is a light page: the set has no dark ground, by decision.",
+    "",
+    "token entry: [value, uses, textOn]",
+    "  uses    one or more of t (text) l (line) f (fill); '' = none",
+    "  textOn  the colour allowed to sit *on* this token when used as a fill: a hex, a token name,",
+    "          or omitted when no text may sit on it",
+    "",
+    "derived values are computed by the generator, never hand-written:",
+    "  tint-<family>   mix(ground, family, 18%)   — the family's panel fill",
+    "  shade-<family>  darken(family, 12%)        — its border",
+    "The mix base is the theme's *ground*, not a surface: mixing into a tinted near-white drags every",
+    "hue towards the same grey and the tints stop being tellable apart (measured, see palette.md)."
+  ],
+  "contract": {
+    "$comment": [
+      "What each token *is*, independent of any theme: its role, what it may sit on, and the",
+      "widest set of uses it may ever be granted (`max`). A theme assigns values and narrows uses",
+      "within `max` — it can never widen them. `max` exists because some families are structurally",
+      "incapable of a use in any theme: an amber that is light enough to be a pleasant band is too",
+      "light to be text or a line, on any ground."
+    ],
+    "ink": {
+      "max": "t",
+      "sitsOn": "surface-*, tint-*",
+      "role": "body text inside fills, headings, node labels"
+    },
+    "ink-soft": {
+      "max": "t",
+      "sitsOn": "page",
+      "role": "secondary body text on an unfilled background"
+    },
+    "muted": {
+      "max": "t",
+      "sitsOn": "page",
+      "role": "captions, axes tick labels, metadata — never inside a tinted fill"
+    },
+    "line": {
+      "max": "l",
+      "sitsOn": "",
+      "role": "borders, edges, arrows, axes, rules"
+    },
+    "line-strong": {
+      "max": "l",
+      "sitsOn": "",
+      "role": "emphasis border, connector on a tinted fill"
+    },
+    "surface-0": {
+      "max": "f",
+      "sitsOn": "",
+      "role": "quietest container fill"
+    },
+    "surface-1": {
+      "max": "f",
+      "sitsOn": "",
+      "role": "default shape / card fill"
+    },
+    "surface-2": {
+      "max": "f",
+      "sitsOn": "",
+      "role": "nested or selected container fill"
+    },
+    "cat-1": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 1 — also the accent colour"
+    },
+    "cat-2": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 2 — marks and lines only"
+    },
+    "cat-3": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 3 — fill only; the family is too light for text or lines in any theme"
+    },
+    "cat-4": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 4"
+    },
+    "cat-5": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 5"
+    },
+    "cat-6": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 6 — marks and lines only"
+    },
+    "cat-7": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 7 — marks and lines only"
+    },
+    "cat-8": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "category 8"
+    },
+    "positive": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "gains, passes, healthy state"
+    },
+    "positive-ink": {
+      "max": "tl",
+      "sitsOn": "page",
+      "role": "positive text and deltas"
+    },
+    "negative": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "failures, regressions"
+    },
+    "negative-ink": {
+      "max": "tl",
+      "sitsOn": "page",
+      "role": "negative text and deltas — the family shade, granted the text role so a red chip can carry red words"
+    },
+    "warning": {
+      "max": "tlf",
+      "sitsOn": "",
+      "role": "warning fill / band"
+    },
+    "warning-ink": {
+      "max": "tl",
+      "sitsOn": "page",
+      "role": "warning text and threshold lines"
+    },
+    "target": {
+      "max": "l",
+      "sitsOn": "",
+      "role": "dashed reference lines / goal markers"
+    }
+  },
+  "themes": [
+    {
+      "id": "default",
+      "title": "Default",
+      "scenario": "documents, reports, dashboards, anything that lives on a white page",
+      "ground": "#ffffff",
+      "summary": "The reference theme: a deep neutral blue accent over cool near-white surfaces. Calm enough for a report, structured enough for a dashboard. Every other theme is a deliberate departure from it.",
+      "tokens": {
+        "ink": [
+          "#1f2937",
+          "t"
+        ],
+        "ink-soft": [
+          "#4b5563",
+          "t"
+        ],
+        "muted": [
+          "#676f7e",
+          "t"
+        ],
+        "line": [
+          "#5b6b8c",
+          "l"
+        ],
+        "line-strong": [
+          "#334155",
+          "l"
+        ],
+        "surface-0": [
+          "#f8fafc",
+          "f",
+          "ink"
+        ],
+        "surface-1": [
+          "#eef2fb",
+          "f",
+          "ink"
+        ],
+        "surface-2": [
+          "#dfe5fb",
+          "f",
+          "ink"
+        ],
+        "cat-1": [
+          "#2b66c4",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-2": [
+          "#2f9e44",
+          "lf"
+        ],
+        "cat-3": [
+          "#f3a33c",
+          "f"
+        ],
+        "cat-4": [
+          "#d1242f",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-5": [
+          "#7048e8",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-6": [
+          "#0f9b9b",
+          "lf"
+        ],
+        "cat-7": [
+          "#c16f8a",
+          "lf"
+        ],
+        "cat-8": [
+          "#7c5a3d",
+          "tlf",
+          "#ffffff"
+        ],
+        "positive": [
+          "#2f9e44",
+          "lf"
+        ],
+        "positive-ink": [
+          "#1f7a33",
+          "tl"
+        ],
+        "negative": [
+          "#d1242f",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative-ink": [
+          "#b82029",
+          "tl"
+        ],
+        "warning": [
+          "#f3a33c",
+          "f"
+        ],
+        "warning-ink": [
+          "#8a5a00",
+          "tl"
+        ],
+        "target": [
+          "#6b7280",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "print",
+      "title": "Print",
+      "scenario": "black-and-white printing, photocopies, low-ink handouts, fax-grade pipelines",
+      "ground": "#ffffff",
+      "summary": "One achromatic ladder. Categories are told apart by luminance alone, so the ramp has five genuinely separable steps — a mono theme cannot offer eight. Semantic colour collapses too: positive and negative differ only by weight, so a figure that depends on red-versus-green must carry a label or a sign instead.",
+      "tokens": {
+        "ink": [
+          "#111827",
+          "t"
+        ],
+        "ink-soft": [
+          "#374151",
+          "t"
+        ],
+        "muted": [
+          "#6b7280",
+          "t"
+        ],
+        "line": [
+          "#4b5563",
+          "l"
+        ],
+        "line-strong": [
+          "#1f2937",
+          "l"
+        ],
+        "surface-0": [
+          "#f9fafb",
+          "f",
+          "ink"
+        ],
+        "surface-1": [
+          "#f3f4f6",
+          "f",
+          "ink"
+        ],
+        "surface-2": [
+          "#e5e7eb",
+          "f",
+          "ink"
+        ],
+        "cat-1": [
+          "#111827",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-2": [
+          "#2b3440",
+          "lf"
+        ],
+        "cat-3": [
+          "#4b5563",
+          "f"
+        ],
+        "cat-4": [
+          "#5f6771",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-5": [
+          "#6b7280",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-6": [
+          "#868f9b",
+          "lf"
+        ],
+        "cat-7": [
+          "#a3abb6",
+          "f"
+        ],
+        "cat-8": [
+          "#c6ccd4",
+          "f"
+        ],
+        "positive": [
+          "#4b5563",
+          "lf"
+        ],
+        "positive-ink": [
+          "#374151",
+          "tl"
+        ],
+        "negative": [
+          "#111827",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative-ink": [
+          "#0f1522",
+          "tl"
+        ],
+        "warning": [
+          "#a3abb6",
+          "f"
+        ],
+        "warning-ink": [
+          "#4b5563",
+          "tl"
+        ],
+        "target": [
+          "#6b7280",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "vivid",
+      "title": "Vivid",
+      "scenario": "presentations, slides, marketing pages, anything projected or glanced at",
+      "ground": "#ffffff",
+      "summary": "The same eight hues pushed to high chroma, on cool white surfaces. Four of the eight are light enough that they cannot carry text, so they are declared fill-only — a vivid slide should label its slices outside the slice anyway.",
+      "tokens": {
+        "ink": [
+          "#111827",
+          "t"
+        ],
+        "ink-soft": [
+          "#374151",
+          "t"
+        ],
+        "muted": [
+          "#5b6472",
+          "t"
+        ],
+        "line": [
+          "#556074",
+          "l"
+        ],
+        "line-strong": [
+          "#374151",
+          "l"
+        ],
+        "surface-0": [
+          "#f8fafc",
+          "f",
+          "ink"
+        ],
+        "surface-1": [
+          "#eef2ff",
+          "f",
+          "ink"
+        ],
+        "surface-2": [
+          "#e0e7ff",
+          "f",
+          "ink"
+        ],
+        "cat-1": [
+          "#2563eb",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-2": [
+          "#16a34a",
+          "lf"
+        ],
+        "cat-3": [
+          "#f59e0b",
+          "f"
+        ],
+        "cat-4": [
+          "#dc2626",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-5": [
+          "#7c3aed",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-6": [
+          "#0d9488",
+          "lf"
+        ],
+        "cat-7": [
+          "#db2777",
+          "lf"
+        ],
+        "cat-8": [
+          "#92400e",
+          "tlf",
+          "#ffffff"
+        ],
+        "positive": [
+          "#16a34a",
+          "lf"
+        ],
+        "positive-ink": [
+          "#15803d",
+          "tl"
+        ],
+        "negative": [
+          "#dc2626",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative-ink": [
+          "#c22121",
+          "tl"
+        ],
+        "warning": [
+          "#f59e0b",
+          "f"
+        ],
+        "warning-ink": [
+          "#b45309",
+          "tl"
+        ],
+        "target": [
+          "#64748b",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "editorial",
+      "title": "Editorial",
+      "scenario": "long-form reading, memos, policy documents, print-ready reports on cream stock",
+      "ground": "#fdfaf3",
+      "summary": "Warm cream ground, desaturated hues, and a deeper ink. Quieter than the default theme and warmer than white — the palette equivalent of a well-set page of prose. Category colour is muted on purpose: in editorial layouts it marks, it does not shout.",
+      "tokens": {
+        "ink": [
+          "#2b2620",
+          "t"
+        ],
+        "ink-soft": [
+          "#554d42",
+          "t"
+        ],
+        "muted": [
+          "#6f6659",
+          "t"
+        ],
+        "line": [
+          "#8a7f6d",
+          "l"
+        ],
+        "line-strong": [
+          "#5b5245",
+          "l"
+        ],
+        "surface-0": [
+          "#fbf8f1",
+          "f",
+          "ink"
+        ],
+        "surface-1": [
+          "#f5f0e4",
+          "f",
+          "ink"
+        ],
+        "surface-2": [
+          "#ebe4d4",
+          "f",
+          "ink"
+        ],
+        "cat-1": [
+          "#2f5d8a",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-2": [
+          "#4f7a52",
+          "lf"
+        ],
+        "cat-3": [
+          "#c9a227",
+          "f"
+        ],
+        "cat-4": [
+          "#a8433f",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-5": [
+          "#6b5b95",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-6": [
+          "#3f7d78",
+          "lf"
+        ],
+        "cat-7": [
+          "#a86b7d",
+          "lf"
+        ],
+        "cat-8": [
+          "#7a6248",
+          "tlf",
+          "#ffffff"
+        ],
+        "positive": [
+          "#4f7a52",
+          "lf"
+        ],
+        "positive-ink": [
+          "#3d6340",
+          "tl"
+        ],
+        "negative": [
+          "#a8433f",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative-ink": [
+          "#943b37",
+          "tl"
+        ],
+        "warning": [
+          "#c9a227",
+          "f"
+        ],
+        "warning-ink": [
+          "#8a6b12",
+          "tl"
+        ],
+        "target": [
+          "#8a7f6d",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "accessible",
+      "title": "Accessible",
+      "scenario": "colour-critical figures, charts read by colour-blind readers, screen-and-print pairs",
+      "ground": "#ffffff",
+      "summary": "The Okabe–Ito Colour Universal Design set, ordered warm/cool alternating as the CUD guidance prescribes, with the darker blue and orange it recommends for thin marks. Red-versus-green is never the only difference between two categories. Members too light to clear 3.0 on white are declared fill-only, exactly as the CUD page advises — label outside the fill rather than thin the colour into a line.",
+      "tokens": {
+        "ink": [
+          "#292c31",
+          "t"
+        ],
+        "ink-soft": [
+          "#454953",
+          "t"
+        ],
+        "muted": [
+          "#575d69",
+          "t"
+        ],
+        "line": [
+          "#737a8a",
+          "l"
+        ],
+        "line-strong": [
+          "#4c505a",
+          "l"
+        ],
+        "surface-0": [
+          "#fbfcfe",
+          "f",
+          "#292c31"
+        ],
+        "surface-1": [
+          "#f4f6fa",
+          "f",
+          "#292c31"
+        ],
+        "surface-2": [
+          "#e9edf4",
+          "f",
+          "#292c31"
+        ],
+        "cat-1": [
+          "#0072b2",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-2": [
+          "#e69f00",
+          "f"
+        ],
+        "cat-3": [
+          "#009e73",
+          "lf"
+        ],
+        "cat-4": [
+          "#d55e00",
+          "lf"
+        ],
+        "cat-5": [
+          "#56b4e9",
+          "f"
+        ],
+        "cat-6": [
+          "#f0e442",
+          "f"
+        ],
+        "cat-7": [
+          "#cc79a7",
+          "lf"
+        ],
+        "cat-8": [
+          "#6e6e6e",
+          "tlf",
+          "#ffffff"
+        ],
+        "positive": [
+          "#009e73",
+          "lf"
+        ],
+        "negative": [
+          "#d55e00",
+          "lf"
+        ],
+        "negative-ink": [
+          "#bb5300",
+          "tl"
+        ],
+        "warning": [
+          "#e69f00",
+          "f"
+        ],
+        "positive-ink": [
+          "#008663",
+          "tl"
+        ],
+        "warning-ink": [
+          "#9d6d00",
+          "tl"
+        ],
+        "target": [
+          "#575d69",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "contrast",
+      "title": "Contrast",
+      "scenario": "large-print handouts, low vision, projection in a bright room, twice-photocopied handouts",
+      "ground": "#ffffff",
+      "summary": "Everything raised. Ink is black, every line clears 4.5 where other themes settle for 3.0, and all eight categories are dark enough to serve as text as well as marks. Built to the APCA use-case ranges rather than the WCAG floor — the theme for a reader who is not going to lean in.",
+      "tokens": {
+        "ink": [
+          "#000000",
+          "t"
+        ],
+        "ink-soft": [
+          "#313131",
+          "t"
+        ],
+        "muted": [
+          "#424242",
+          "t"
+        ],
+        "line": [
+          "#636363",
+          "l"
+        ],
+        "line-strong": [
+          "#313131",
+          "l"
+        ],
+        "surface-0": [
+          "#f7f7f7",
+          "f",
+          "#000000"
+        ],
+        "surface-1": [
+          "#ededed",
+          "f",
+          "#000000"
+        ],
+        "surface-2": [
+          "#dedede",
+          "f",
+          "#000000"
+        ],
+        "cat-1": [
+          "#0b4fa8",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-2": [
+          "#7a3400",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-3": [
+          "#006b4f",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-4": [
+          "#8c0e18",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-5": [
+          "#5b2d9e",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-6": [
+          "#0a6a6e",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-7": [
+          "#a6105e",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-8": [
+          "#4a4a4a",
+          "tlf",
+          "#ffffff"
+        ],
+        "positive": [
+          "#006b4f",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative": [
+          "#8c0e18",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative-ink": [
+          "#7b0c15",
+          "tl"
+        ],
+        "warning": [
+          "#7a3400",
+          "f"
+        ],
+        "positive-ink": [
+          "#006b4f",
+          "tl"
+        ],
+        "warning-ink": [
+          "#7a3400",
+          "tl"
+        ],
+        "target": [
+          "#424242",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "slate",
+      "title": "Slate",
+      "scenario": "technical documentation, dashboards, API and infra references, internal wikis",
+      "ground": "#f4f4f4",
+      "summary": "The IBM Carbon Gray 10 theme read as a figure palette: a neutral grey page, grey-scale layering for containers, and one blue that carries the accent. Category colour is used in the Carbon register — enough to separate series, never enough to decorate.",
+      "tokens": {
+        "ink": [
+          "#1e1e1e",
+          "t"
+        ],
+        "ink-soft": [
+          "#3f3f3f",
+          "t"
+        ],
+        "muted": [
+          "#565656",
+          "t"
+        ],
+        "line": [
+          "#787878",
+          "l"
+        ],
+        "line-strong": [
+          "#4a4a4a",
+          "l"
+        ],
+        "surface-0": [
+          "#fbfbfb",
+          "f",
+          "#1e1e1e"
+        ],
+        "surface-1": [
+          "#ffffff",
+          "f",
+          "#1e1e1e"
+        ],
+        "surface-2": [
+          "#e8e8e8",
+          "f",
+          "#1e1e1e"
+        ],
+        "cat-1": [
+          "#0043ce",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-2": [
+          "#0e6027",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-3": [
+          "#750e13",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-4": [
+          "#6929c4",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-5": [
+          "#004f4f",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-6": [
+          "#9f1853",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-7": [
+          "#525252",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-8": [
+          "#8e6a00",
+          "tlf",
+          "#ffffff"
+        ],
+        "positive": [
+          "#0e6027",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative": [
+          "#750e13",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative-ink": [
+          "#670c11",
+          "tl"
+        ],
+        "warning": [
+          "#8e6a00",
+          "f"
+        ],
+        "positive-ink": [
+          "#0e6027",
+          "tl"
+        ],
+        "warning-ink": [
+          "#8e6a00",
+          "tl"
+        ],
+        "target": [
+          "#565656",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "pastel",
+      "title": "Pastel",
+      "scenario": "onboarding, education, HR and internal comms, anything that should feel gentle",
+      "ground": "#eff1f5",
+      "summary": "Catppuccin’s light flavour as a document palette: a soft blue-grey page, low-contrast neutrals, and accents that stay quiet even at full chroma. Warmer and rounder than the default theme — for a figure that has to sit inside prose which is trying not to alarm anyone.",
+      "tokens": {
+        "ink": [
+          "#3b3d4a",
+          "t"
+        ],
+        "ink-soft": [
+          "#4c4e60",
+          "t"
+        ],
+        "muted": [
+          "#5d6077",
+          "t"
+        ],
+        "line": [
+          "#797c95",
+          "l"
+        ],
+        "line-strong": [
+          "#525468",
+          "l"
+        ],
+        "surface-0": [
+          "#f6f7fa",
+          "f",
+          "#3b3d4a"
+        ],
+        "surface-1": [
+          "#e6e9ef",
+          "f",
+          "#3b3d4a"
+        ],
+        "surface-2": [
+          "#dce0e8",
+          "f",
+          "#3b3d4a"
+        ],
+        "cat-1": [
+          "#1e66f5",
+          "lf"
+        ],
+        "cat-2": [
+          "#40a02b",
+          "f"
+        ],
+        "cat-3": [
+          "#8a6a00",
+          "lf"
+        ],
+        "cat-4": [
+          "#d20f39",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-5": [
+          "#8839ef",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-6": [
+          "#179299",
+          "lf"
+        ],
+        "cat-7": [
+          "#ea76cb",
+          "f"
+        ],
+        "cat-8": [
+          "#c04a1a",
+          "lf"
+        ],
+        "positive": [
+          "#40a02b",
+          "f"
+        ],
+        "negative": [
+          "#d20f39",
+          "tlf",
+          "#ffffff"
+        ],
+        "negative-ink": [
+          "#b90d32",
+          "tl"
+        ],
+        "warning": [
+          "#8a6a00",
+          "f"
+        ],
+        "positive-ink": [
+          "#347c1f",
+          "tl"
+        ],
+        "warning-ink": [
+          "#876800",
+          "tl"
+        ],
+        "target": [
+          "#5d6077",
+          "l"
+        ]
+      }
+    },
+    {
+      "id": "nord",
+      "title": "Nord",
+      "scenario": "cool technical decks, developer-facing docs, calm long sessions, Nordic branding",
+      "ground": "#eceff4",
+      "summary": "Nord’s bright-ambiance reading: Snow Storm as page and ink, Frost for the cool half of the ramp, a muted Aurora for the warm half. Deliberately desaturated and cool — Nord’s own hues rather than brightened versions of them, which is why several members are fill-only on a light page.",
+      "tokens": {
+        "ink": [
+          "#303643",
+          "t"
+        ],
+        "ink-soft": [
+          "#3f4758",
+          "t"
+        ],
+        "muted": [
+          "#505a6f",
+          "t"
+        ],
+        "line": [
+          "#6b7994",
+          "l"
+        ],
+        "line-strong": [
+          "#475063",
+          "l"
+        ],
+        "surface-0": [
+          "#f6f8fb",
+          "f",
+          "#303643"
+        ],
+        "surface-1": [
+          "#e5e9f0",
+          "f",
+          "#303643"
+        ],
+        "surface-2": [
+          "#d8dee9",
+          "f",
+          "#303643"
+        ],
+        "cat-1": [
+          "#5e81ac",
+          "lf"
+        ],
+        "cat-2": [
+          "#bf616a",
+          "lf"
+        ],
+        "cat-3": [
+          "#4f7a3f",
+          "lf"
+        ],
+        "cat-4": [
+          "#a35a2e",
+          "lf"
+        ],
+        "cat-5": [
+          "#8f6aa8",
+          "lf"
+        ],
+        "cat-6": [
+          "#3d7f8c",
+          "lf"
+        ],
+        "cat-7": [
+          "#7d6a3a",
+          "tlf",
+          "#ffffff"
+        ],
+        "cat-8": [
+          "#81a1c1",
+          "f"
+        ],
+        "positive": [
+          "#4f7a3f",
+          "lf"
+        ],
+        "negative": [
+          "#bf616a",
+          "lf"
+        ],
+        "negative-ink": [
+          "#a4535b",
+          "tl"
+        ],
+        "warning": [
+          "#7d6a3a",
+          "f"
+        ],
+        "positive-ink": [
+          "#4b763d",
+          "tl"
+        ],
+        "warning-ink": [
+          "#7d6a3a",
+          "tl"
+        ],
+        "target": [
+          "#505a6f",
+          "l"
+        ]
+      }
+    }
+  ]
+}

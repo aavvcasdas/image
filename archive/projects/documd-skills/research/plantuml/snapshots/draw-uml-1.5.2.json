@@ -1,0 +1,840 @@
+{
+  "engine": "1.5.2",
+  "date": "2026-09-22",
+  "cli": "/Users/lion/works/markdown-viewer-extension/dist/cli/documd.js",
+  "tally": {
+    "yes": 82,
+    "no": 13,
+    "effect": 7,
+    "ignored": 7,
+    "ok": 9
+  },
+  "results": [
+    {
+      "id": "4.1 skinparam DefaultFontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.1 skinparam ArrowColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.1 skinparam ArrowFontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.1 skinparam backgroundColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.1 skinparam ArrowThickness 5",
+      "kind": "structure",
+      "documd": "effect",
+      "official": "—",
+      "why": "stroke-width [\"1\"] → [\"1\",\"5\"]"
+    },
+    {
+      "id": "4.1 skinparam Padding 30",
+      "kind": "structure",
+      "documd": "ignored",
+      "official": "—",
+      "why": "output identical to the directive-free baseline"
+    },
+    {
+      "id": "4.1 skinparam DefaultFontSize 24",
+      "kind": "structure",
+      "documd": "effect",
+      "official": "—",
+      "why": "canvas \"83x40\" → \"162x75\" · font-size [\"0\",\"12\"] → [\"0\",\"24\"] · stroke-width [\"1\"] → [\"2\"]"
+    },
+    {
+      "id": "4.1 skinparam nodesep 200",
+      "kind": "structure",
+      "documd": "effect",
+      "official": "—",
+      "why": "canvas \"145x115\" → \"325x115\""
+    },
+    {
+      "id": "4.2 Rectangle BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Rectangle BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Rectangle FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Component BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Component BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Component FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Class BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Class BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Class FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Usecase BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Usecase BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Usecase FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Database BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Database BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Database FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Node BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Node BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Node FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Actor BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Actor BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Actor FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 State BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 State BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 State FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Note BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Note BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Note FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Artifact BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Artifact BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Artifact FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Cloud BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Cloud BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Cloud FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Folder BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Folder BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Folder FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Package BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Package BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Package FontColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.2 Participant BackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Participant BorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 Participant FontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.2 SequenceLifeLineBorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 rectangle { BackgroundColor }",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 rectangle<<tag>> { BackgroundColor }",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 stereotypeCBackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 stereotypeCBorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 stereotypeCFontColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.3 stereotypeIBackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 stereotypeEBackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 stereotypeABackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.3 stereotypeBackgroundColor (no letter)",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.3 custom spot beats stereotypeC*",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.4 rectangle #fill",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.4 rectangle ##border",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.4 rectangle #fill##border",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "2/2 tokens"
+    },
+    {
+      "id": "4.4 rectangle #fill ##border (spaced)",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "2/2 tokens"
+    },
+    {
+      "id": "4.4 rectangle #line:;back:;text: (no #)",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "3/3 tokens"
+    },
+    {
+      "id": "4.4 rectangle #line:;back:;text: (# inside)",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "3/3 tokens"
+    },
+    {
+      "id": "4.4 rectangle legacy #f;line:x;text:z",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "3/3 tokens"
+    },
+    {
+      "id": "4.4 class #fill##border",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "2/2 tokens"
+    },
+    {
+      "id": "4.4 class #named##named",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "2/2 tokens"
+    },
+    {
+      "id": "4.4 activity :step; <<#fill>>",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.4 activity #fill:step; (legacy)",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.5 <style> rectangle",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "3/3 tokens"
+    },
+    {
+      "id": "4.5 <style> classDiagram",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.5 <style> classDiagram { class { } }",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.5 <style> root",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "3/3 tokens"
+    },
+    {
+      "id": "4.5 <style> activityDiagram",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "2/2 tokens"
+    },
+    {
+      "id": "4.5 <style> activity",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.5 <style> participant",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.5 <style> sequenceDiagram",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.6 sequenceArrowColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.6 sequence { ArrowColor }",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.6 sequence { LifeLineBorderColor }",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.6 SequenceBoxBackgroundColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.6 SequenceParticipantBorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.7 ActivityBackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.7 ActivityBorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.7 ActivityDiamondBackgroundColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.7 ActivityStartColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.7 ClassHeaderBackgroundColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.7 ClassAttributeFontColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.7 ClassArrowColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.7 NoteBorderColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.7 NoteFontColor",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.7 LegendBackgroundColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.7 LegendBorderColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.7 TitleFontColor",
+      "kind": "color",
+      "documd": "no",
+      "official": "—",
+      "why": "0/1 tokens"
+    },
+    {
+      "id": "4.8 shadowing false",
+      "kind": "structure",
+      "documd": "ignored",
+      "official": "—",
+      "why": "output identical to the directive-free baseline"
+    },
+    {
+      "id": "4.8 defaultFontName Courier",
+      "kind": "structure",
+      "documd": "ignored",
+      "official": "—",
+      "why": "output identical to the directive-free baseline"
+    },
+    {
+      "id": "4.8 roundcorner 20",
+      "kind": "structure",
+      "documd": "effect",
+      "official": "—",
+      "why": "rx [\"5\"] → [\"17.5\"]"
+    },
+    {
+      "id": "4.8 monochrome true",
+      "kind": "structure",
+      "documd": "ignored",
+      "official": "—",
+      "why": "output identical to the directive-free baseline"
+    },
+    {
+      "id": "4.8 handwritten true",
+      "kind": "structure",
+      "documd": "ignored",
+      "official": "—",
+      "why": "output identical to the directive-free baseline"
+    },
+    {
+      "id": "4.8 packageStyle rectangle",
+      "kind": "structure",
+      "documd": "effect",
+      "official": "—",
+      "why": "canvas \"125x120\" → \"125x117\" · element kinds 6 → 5"
+    },
+    {
+      "id": "4.8 linetype ortho",
+      "kind": "structure",
+      "documd": "ignored",
+      "official": "—",
+      "why": "output identical to the directive-free baseline"
+    },
+    {
+      "id": "4.8 DefaultFontSize 24",
+      "kind": "structure",
+      "documd": "effect",
+      "official": "—",
+      "why": "canvas \"83x40\" → \"162x75\" · font-size [\"0\",\"12\"] → [\"0\",\"24\"] · stroke-width [\"1\"] → [\"2\"]"
+    },
+    {
+      "id": "4.8 nodesep 200",
+      "kind": "structure",
+      "documd": "effect",
+      "official": "—",
+      "why": "canvas \"145x115\" → \"325x115\""
+    },
+    {
+      "id": "4.8 !theme cerulean",
+      "kind": "structure",
+      "documd": "ignored",
+      "official": "—",
+      "why": "output identical to the directive-free baseline"
+    },
+    {
+      "id": "4.8 !theme plain",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "4.8 !define NAME #hex",
+      "kind": "color",
+      "documd": "yes",
+      "official": "—",
+      "why": "1/1 tokens"
+    },
+    {
+      "id": "5 package P { rectangle R }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "2851 B"
+    },
+    {
+      "id": "5 package \"P\" as p { rectangle R }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "2851 B"
+    },
+    {
+      "id": "5 node N { rectangle R }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "2964 B"
+    },
+    {
+      "id": "5 class K { +int x }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "3621 B"
+    },
+    {
+      "id": "5 cloud C { rectangle R }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "3865 B"
+    },
+    {
+      "id": "5 frame Fr { rectangle R }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "3021 B"
+    },
+    {
+      "id": "5 folder F { rectangle R }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "2851 B"
+    },
+    {
+      "id": "5 rectangle R { rectangle S }",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "2844 B"
+    },
+    {
+      "id": "5 package P {⏎ rectangle R⏎ } (multiline control)",
+      "kind": "empty",
+      "documd": "ok",
+      "official": "—",
+      "why": "2851 B"
+    }
+  ]
+}

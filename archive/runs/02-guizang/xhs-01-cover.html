@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN" data-accent="ikb">
+<head>
+<meta charset="utf-8">
+<title>RAG 是什么 · 小红书封面（Swiss S01 Accent Cover）</title>
+<style>
+  /* Guizang Swiss International token layer — 本地化版本（不引外部字体/CDN） */
+  :root{
+    --paper:#fafaf8; --ink:#0a0a0a; --grey-1:#f0f0ee; --grey-2:#d4d4d2; --grey-3:#737373;
+    --accent:#002FA7; --accent-on:#ffffff;
+    --sans-zh:"Noto Sans SC",-apple-system,"PingFang SC",sans-serif;
+    --mono:ui-monospace,"SF Mono","IBM Plex Mono",monospace;
+    --sp-6:24px; --sp-7:32px; --sp-9:48px; --sp-10:64px; --sp-11:80px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1080px;height:1440px;font-family:var(--sans-zh);-webkit-font-smoothing:antialiased}
+  .poster.xhs{
+    position:relative;width:1080px;height:1440px;background:var(--accent);color:var(--accent-on);
+    padding:96px 84px 104px;display:flex;flex-direction:column;
+  }
+  /* meta 条：mono 20px / 宽字距 */
+  .t-meta{font-family:var(--mono);font-size:20px;font-weight:500;letter-spacing:.20em;
+          text-transform:uppercase;opacity:.72}
+  .top{display:flex;justify-content:space-between;align-items:baseline}
+  .hero-wrap{margin-top:150px}
+  /* 核心规则：越大越轻 */
+  .h-hero{font-size:236px;font-weight:200;line-height:.94;letter-spacing:-.02em}
+  .h-xl{font-size:112px;font-weight:300;line-height:1.08;letter-spacing:.02em;margin-top:26px}
+  .lead{font-size:30px;font-weight:400;line-height:1.55;margin-top:44px;max-width:760px;opacity:.9}
+
+  /* S01：一个抽象的双节点系统图，不做装饰性色块 */
+  .two-node{display:flex;align-items:center;gap:0;margin-top:120px}
+  .node{border:2px solid rgba(255,255,255,.55);padding:26px 34px;display:flex;flex-direction:column;gap:8px}
+  .node .n{font-size:34px;font-weight:500}
+  .node .s{font-family:var(--mono);font-size:18px;font-weight:500;letter-spacing:.16em;opacity:.7}
+  .wire{flex:1;height:2px;background:rgba(255,255,255,.45);position:relative}
+  .wire::after{content:"";position:absolute;right:-1px;top:-7px;border-left:12px solid rgba(255,255,255,.75);
+               border-top:8px solid transparent;border-bottom:8px solid transparent}
+  .wire .cap{position:absolute;left:50%;top:-40px;transform:translateX(-50%);white-space:nowrap;
+             font-family:var(--mono);font-size:18px;letter-spacing:.16em;opacity:.75}
+
+  .foot{margin-top:auto;border-top:1px solid rgba(255,255,255,.35);padding-top:26px;
+        display:flex;justify-content:space-between;align-items:baseline}
+</style>
+</head>
+<body>
+  <div class="poster xhs">
+    <div class="top">
+      <div class="t-meta">AI 科普图鉴 · 001</div>
+      <div class="t-meta">XHS 1080 × 1440</div>
+    </div>
+
+    <div class="hero-wrap">
+      <div class="h-hero">RAG</div>
+      <div class="h-xl">检索增强生成</div>
+      <div class="lead">让大模型先查资料、再开口说话。<br>把「我觉得」换成「根据文档」。</div>
+    </div>
+
+    <!-- S01：两个节点 + 一条关系线 -->
+    <div class="two-node">
+      <div class="node"><span class="n">你的知识库</span><span class="s">DOCUMENTS</span></div>
+      <div class="wire"><span class="cap">检索 TOP-K</span></div>
+      <div class="node"><span class="n">模型的回答</span><span class="s">WITH CITATION</span></div>
+    </div>
+
+    <div class="foot">
+      <div class="t-meta">大模型为什么胡说 · 第 1 张</div>
+      <div class="t-meta">2026</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1170 560" width="1170" height="560" role="img" aria-labelledby="ttl desc">
+  <title id="ttl">RAG 是怎么让大模型说真话的</title>
+  <desc id="desc">检索增强生成（RAG）的完整链路：用户提问、向量化检索、Top-K 召回、Prompt 拼装、大模型生成带引用的回答。</desc>
+
+  <style>
+    .t   { font-family: 'JetBrains Mono', 'Noto Sans SC', monospace; }
+    .n   { font-size: 12px; font-weight: 600; fill: #e2e8f0; }
+    .s   { font-size: 9px;  font-weight: 400; fill: #94a3b8; }
+    .lbl { font-size: 9px;  font-weight: 400; fill: #64748b; }
+    .step{ font-size: 10px; font-weight: 600; fill: #334155; letter-spacing: 1px; }
+    .h1  { font-size: 24px; font-weight: 700; fill: #f1f5f9; }
+    .h2  { font-size: 12px; font-weight: 400; fill: #64748b; }
+    .lg  { font-size: 10px; font-weight: 400; fill: #94a3b8; }
+  </style>
+
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
+    </marker>
+  </defs>
+
+  <!-- 1. 背景 + 网格 -->
+  <rect width="100%" height="100%" fill="#0f172a"/>
+  <rect width="100%" height="100%" fill="url(#grid)"/>
+
+  <!-- 2. 区域边界：检索子系统 -->
+  <rect x="238" y="112" width="454" height="290" rx="10" fill="none"
+        stroke="#1e293b" stroke-width="1" stroke-dasharray="5 5"/>
+  <text class="t lbl" x="252" y="130" fill="#475569">检索子系统 · Retrieval</text>
+
+  <!-- 3. 连线 -->
+  <line x1="200" y1="340" x2="264" y2="340" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="t lbl" x="232" y="330" text-anchor="middle">向量化</text>
+
+  <line x1="430" y1="340" x2="494" y2="340" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="t lbl" x="462" y="330" text-anchor="middle">相似度匹配</text>
+
+  <line x1="660" y1="340" x2="724" y2="340" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="t lbl" x="692" y="330" text-anchor="middle">取 Top-K</text>
+
+  <line x1="890" y1="340" x2="954" y2="340" stroke="#60a5fa" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text class="t lbl" x="922" y="330" text-anchor="middle">带引用作答</text>
+
+  <line x1="350" y1="220" x2="350" y2="294" stroke="#a78bfa" stroke-width="1.5"
+        stroke-dasharray="4 3" marker-end="url(#arrow-violet)"/>
+  <text class="t lbl" x="360" y="265">语义召回</text>
+
+  <!-- 4. 不透明遮罩（挡住穿透的连线） -->
+  <rect x="270" y="140" width="390" height="80" rx="8" fill="#0f172a"/>
+  <rect x="40"  y="300" width="160" height="80" rx="8" fill="#0f172a"/>
+  <rect x="270" y="300" width="160" height="80" rx="8" fill="#0f172a"/>
+  <rect x="500" y="300" width="160" height="80" rx="8" fill="#0f172a"/>
+  <rect x="730" y="300" width="160" height="80" rx="8" fill="#0f172a"/>
+  <rect x="960" y="300" width="170" height="80" rx="8" fill="#0f172a"/>
+
+  <!-- 5. 组件 -->
+  <rect x="270" y="140" width="390" height="80" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text class="t n" x="465" y="178" text-anchor="middle">知识库 · 向量数据库</text>
+  <text class="t s" x="465" y="198" text-anchor="middle">文档切片 → Embedding → 向量索引（离线建好）</text>
+
+  <rect x="40" y="300" width="160" height="80" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text class="t n" x="120" y="336" text-anchor="middle">用户提问</text>
+  <text class="t s" x="120" y="356" text-anchor="middle">自然语言问题</text>
+
+  <rect x="270" y="300" width="160" height="80" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text class="t n" x="350" y="336" text-anchor="middle">检索器</text>
+  <text class="t s" x="350" y="356" text-anchor="middle">问题也编码成向量</text>
+
+  <rect x="500" y="300" width="160" height="80" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text class="t n" x="580" y="336" text-anchor="middle">召回 Top-K 片段</text>
+  <text class="t s" x="580" y="356" text-anchor="middle">最相关的原文段落</text>
+
+  <rect x="730" y="300" width="160" height="80" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text class="t n" x="810" y="336" text-anchor="middle">Prompt 拼装</text>
+  <text class="t s" x="810" y="356" text-anchor="middle">问题 + 证据一起喂</text>
+
+  <rect x="960" y="300" width="170" height="80" rx="8" fill="rgba(59,130,246,0.3)" stroke="#60a5fa" stroke-width="1.5"/>
+  <text class="t n" x="1045" y="336" text-anchor="middle">大模型生成</text>
+  <text class="t s" x="1045" y="356" text-anchor="middle">只依据给定证据回答</text>
+
+  <!-- 6. 步骤标号 -->
+  <text class="t step" x="120"  y="288" text-anchor="middle">01</text>
+  <text class="t step" x="350"  y="288" text-anchor="middle">02</text>
+  <text class="t step" x="580"  y="288" text-anchor="middle">03</text>
+  <text class="t step" x="810"  y="288" text-anchor="middle">04</text>
+  <text class="t step" x="1045" y="288" text-anchor="middle">05</text>
+
+  <!-- 7. 图例 -->
+  <rect x="40" y="496" width="12" height="12" rx="2" fill="rgba(8,51,68,0.4)"   stroke="#22d3ee" stroke-width="1.2"/>
+  <text class="t lg" x="60"  y="506">用户输入</text>
+  <rect x="150" y="496" width="12" height="12" rx="2" fill="rgba(6,78,59,0.4)"  stroke="#34d399" stroke-width="1.2"/>
+  <text class="t lg" x="170" y="506">检索与召回</text>
+  <rect x="285" y="496" width="12" height="12" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text class="t lg" x="305" y="506">知识库 / 存储</text>
+  <rect x="435" y="496" width="12" height="12" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text class="t lg" x="455" y="506">上下文拼装</text>
+  <rect x="565" y="496" width="12" height="12" rx="2" fill="rgba(59,130,246,0.3)" stroke="#60a5fa" stroke-width="1.2"/>
+  <text class="t lg" x="585" y="506">生成回答</text>
+
+  <!-- 8. 标题区 -->
+  <text class="t h1" x="40" y="58">RAG 是怎么让大模型「说真话」的</text>
+  <text class="t h2" x="40" y="86">检索增强生成 · 一次回答的完整链路</text>
+  <text class="t h2" x="1130" y="58" text-anchor="end">AI 科普图鉴 · 001</text>
+</svg>
