@@ -5,7 +5,7 @@
  * 需要模型生图时：把 Arena 生图作为 <img> 内联进卡片（见 --bg 参数），文字由代码排版。
  *
  * 用法：
- *   node setup/satori-cards.mjs --content runs/06-satori/quotes.json --out runs/06-satori --bg-dir runs/assets/arena
+ *   node setup/satori-cards.mjs --content runs/12-satori/quotes.json --out runs/12-satori --bg-dir runs/assets/arena
  */
 import satori from 'satori';
 import { Resvg } from '@resvg/resvg-js';
@@ -16,8 +16,8 @@ import os from 'node:os';
 
 const argv = process.argv.slice(2);
 const arg = (n, d) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : d; };
-const contentPath = path.resolve(arg('--content', 'runs/06-satori/quotes.json'));
-const outDir = path.resolve(arg('--out', 'runs/06-satori'));
+const contentPath = path.resolve(arg('--content', 'runs/12-satori/quotes.json'));
+const outDir = path.resolve(arg('--out', 'runs/12-satori'));
 const bgDir = arg('--bg-dir');
 const FONT_DIR = process.env.FONT_DIR || path.join(os.homedir(), '.fonts');
 

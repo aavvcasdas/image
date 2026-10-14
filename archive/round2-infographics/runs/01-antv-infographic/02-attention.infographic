@@ -1,0 +1,22 @@
+infographic sequence-horizontal-zigzag-simple-illus
+data
+  title 一句话进来，模型先做什么
+  desc 注意力机制：每个词都在"看"其他词
+  sequences
+    - label 切词
+      desc 句子拆成 token
+      icon scissors
+    - label 转向量
+      desc 每个 token 变成一串数字
+      icon chart scatter
+    - label 算注意力
+      desc 每个词衡量与其他词的相关度
+      icon magnifying glass
+    - label 加权汇总
+      desc 相关度高的词贡献更大
+      icon arrows merge
+    - label 预测下一个词
+      desc 输出一张概率分布表
+      icon dice
+theme
+  palette #7c3aed #06b6d4 #22c55e #f59e0b #ef4444

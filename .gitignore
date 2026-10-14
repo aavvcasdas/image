@@ -2,9 +2,11 @@ node_modules/
 *.log
 .DS_Store
 
-# 上游 vendor 项目的构建/依赖产物
-projects/*/node_modules/
+# 各项目的构建产物 / 依赖（本仓库只 vendor 源码，跑法见 runs/*/run.mjs 与 runs/*/README.md）
+projects/**/node_modules/
 projects/*/dist/
+projects/*/dist/**
 projects/*/target/
 projects/*/.vite/
+projects/MarkCardStudio/package-lock.json
 projects/markcard-studio/src-tauri/target/

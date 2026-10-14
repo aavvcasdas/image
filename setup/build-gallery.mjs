@@ -12,12 +12,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUNS = path.join(ROOT, 'runs');
 
 const TITLES = {
-  '01-auto-redbook-skill': 'Run 01 · Auto-Redbook-Skills（2358★）多主题小红书卡片',
-  '02-xhs-textcard': 'Run 02 · XHS-TextCard（107★）三套模板 + Arena 生图封面',
-  '03-markcard-studio': 'Run 03 · MarkCard Studio（306★）导出 PNG 套图',
-  '04-takumi': 'Run 04 · takumi（3098★）金句卡 + 动态 GIF 封面',
-  '05-article-cards': 'Run 05 · xiaohongshu-article-cards（37★）奶油信息卡轮播',
-  'assets': null, // 素材目录不出现在画廊
+  '01-xhs-textcard': 'Run 01 · XHS-TextCard（107★）小红书竖版卡片',
+  '02-markcardstudio': 'Run 02 · MarkCard Studio（306★）多主题卡片导出',
+  '03-article-tools': 'Run 03 · article-tools（825★）公众号封面',
+  '04-write-then-publish': 'Run 04 · 写了就发（569★）图文卡片 + 长图',
+  '05-ah-xhs-cover-title': 'Run 05 · ah-xhs-cover-title（179★）爆款公式封面',
+  '06-arena-imagegen': 'Run 06 · qiaomu-codex-imagegen（131★）提示词 + Arena 生图 + 代码叠字',
+  '07-auto-redbook-skills': 'Run 07 · Auto-Redbook-Skills（2358★）多主题小红书卡片',
+  '08-xhs-textcard': 'Run 08 · XHS-TextCard 无头驱动（模板 + Arena 生图封面）',
+  '09-markcard-studio': 'Run 09 · MarkCard Studio 真实导出流程（Swiss Grid / Warm Journal）',
+  '10-takumi': 'Run 10 · takumi（3098★）金句卡 + 动态 GIF 封面',
+  '11-xiaohongshu-article-cards': 'Run 11 · xiaohongshu-article-cards（37★）奶油信息卡轮播',
+  '12-satori': 'Run 12 · vercel/satori（14068★）HTML/CSS → PNG',
+  'assets': null, // 素材目录不单独成组
 };
 
 const IMG = /\.(png|jpe?g|gif|webp)$/i;
@@ -69,8 +76,8 @@ const html = `<!doctype html>
 <header>
   <h1>AI 鸡汤 / 涨粉图文 · 代码渲染实测画廊</h1>
   <p class="sub">
-    5 个「不需要 API 接口」的图文创作项目，全部在本仓库实跑产出。<br/>
-    模型生图部分（封面/底图）来自 <strong>Arena 生图</strong>，代码渲染部分完全离线运行；近 3 个月均有更新。<br/>
+    12 个「不需要 API 接口」的图文创作项目，全部在本仓库实跑产出。<br/>
+    模型生图部分（封面/底图）来自 <strong>Arena 生图</strong>，文字与排版全部由代码渲染，运行期零外部 API；近 3 个月均有更新。<br/>
     复现命令见 <code>README.md</code> 与各 <code>runs/&lt;编号&gt;/README.md</code>。
   </p>
 </header>

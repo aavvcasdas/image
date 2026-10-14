@@ -1,0 +1,35 @@
+interface:
+  display_name: "Qiaomu Codex ImageGen"
+  short_description: "Generate images with Codex from any agent, with poster, video cover and Xiaohongshu craft built in"
+  default_prompt: "Use $qiaomu-codex-imagegen for every image request. First extract topic, deliverable, ratio, text mode (none / exact_short / typeset_later), exact facts and reference roles; ask only blocking questions. Then call suggest_directions and present at least four divergent style directions (different visual mechanisms) with one concrete sentence each, and let the user choose, unless they already fixed a style or said to go ahead. Expand each chosen template with compose_prompt using concrete variables (no invented facts, colours as roles, rewrite structural overrides by hand), call generate_image once per chosen direction, then look at every image and check it against the acceptance checks. Each call spends the user's Codex image quota, so no test generations."
+  examples:
+    - "给我几个风格方向，我要做一张咖啡店阅读月的海报"
+    - "帮我做一张小红书配图，主题是清晨读书"
+    - "给这期视频做一张 16:9 的视频封面，要有设计感"
+    - "用 Mondo 风格做一张《沙丘》的电影海报，三个设计师风格各来一张"
+    - "把这张图的背景换成米色纸张，主体不变"
+    - "用 Codex 画一张公众号头图"
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets: ["claude", "openai", "generic", "agent-skills-compatible"]
+  activation:
+    mode: "manual"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "bash"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow catalog metadata and read-only source review; forbid unreviewed execution"
+    generated_public_claims: "evidence-bound"
+  permissions:
+    network: "none directly; the Codex CLI it launches contacts the user's Codex account"
+    file_write: "image output directory only (default ~/Pictures/qiaomu-codex-imagegen)"
+    subprocess: "codex app-server (stdio), sandboxed to the output directory, approval policy never, no network for tools"
+    interactive: "avoid"
+  degradation:
+    claude: "mcp-tool-or-cli"
+    openai: "cli"
+    generic: "cli"
+    agent-skills-compatible: "cli"

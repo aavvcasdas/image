@@ -1,0 +1,110 @@
+schema_version: "1"
+name: svg-reveal
+lifecycle: recommended
+body_format: fields
+version: "1.0.0"
+since: "1.5.0"
+category: interactive
+input_positions: [header-attrs, body-kv]
+serves: [attention, memorability]
+content_types: [tutorial, announcement]
+industry: [general]
+tags: [interactive, svg, reveal, answer]
+position: body
+when_to_use: |
+  点击揭晓答案，适合悬念卡、答案卡、互动提示。
+  保持一问一答且内容简短，确保静态回退仍可读。
+when_not_to_use: |
+  长答案用普通正文或 callout；
+  不需要互动时使用静态内容模块。
+pairs_well_with: [question, callout, summary]
+avoid_combining_with: []
+anti_pattern: |
+  缺少 question 或 answer 会导致渲染失败；
+  svg_fallback=static 时渲染静态可读 HTML。
+opener:
+  param_style: braces
+  params:
+    - name: variant
+      enum: [clean, card]
+      default: card
+    - name: accent
+      description: 强调色
+      enum: [brand, muted, contrast]
+      default: brand
+    - name: density
+      enum: [compact, normal, airy]
+      default: normal
+    - name: wechat_safe_level
+      enum: [strict, normal]
+      default: normal
+    - name: svg_fallback
+      description: SVG 不可用时的回退策略
+      enum: [static, first-layer]
+      default: first-layer
+fields:
+  required:
+    - name: question
+      description: 揭晓前显示的问题
+      example: "点击查看答案"
+    - name: answer
+      description: 点击后显示的答案
+      example: "42"
+example: |
+  :::svg-reveal{accent=brand}
+  question: 点击查看答案
+  answer: 42
+  :::
+agent_contract:
+  body_format: fields
+  required:
+    - question
+    - answer
+  optional:
+    - variant
+    - accent
+    - density
+    - wechat_safe_level
+    - svg_fallback
+  enums:
+    variant:
+      - clean
+      - card
+    accent:
+      - brand
+      - muted
+      - contrast
+    density:
+      - compact
+      - normal
+      - airy
+    wechat_safe_level:
+      - strict
+      - normal
+    svg_fallback:
+      - static
+      - first-layer
+  defaults:
+    variant: card
+    accent: brand
+    density: normal
+    wechat_safe_level: normal
+    svg_fallback: first-layer
+    unknown-enum: field-default
+  invalid:
+    - blank-question
+    - blank-answer
+  ignored:
+    - unsupported-attrs
+  legacy:
+    - case-folded-header-keys
+    - magazine-to-clean
+    - tech-to-clean
+    - elegant-to-clean
+    - bold-to-clean
+    - experimental-to-normal
+  applicability: {}
+metadata:
+  author: md2wechat
+  provenance: builtin
+  inspired_by: "advanced-layout-modules-guide.md#svg-reveal"

@@ -1,0 +1,138 @@
+schema_version: "1"
+name: author-card
+lifecycle: recommended
+body_format: fields
+compatible_body_formats: [json_object]
+version: "1.0.0"
+since: "1.5.0"
+category: brand
+input_positions: [body-kv]
+serves: [memorability, conversion]
+content_types: [opinion, announcement, brand]
+industry: [general]
+tags: [brand, author, profile, identity, bio]
+position: closing
+when_to_use: |
+  建立作者身份和关注理由。
+  适合文章结尾或个人品牌稿件的作者介绍。
+when_not_to_use: |
+  纯数据报告或教程不需要作者卡；
+  团队介绍用 people 模块。
+pairs_well_with: [subscribe, manifesto, series]
+avoid_combining_with: [author-card]
+anti_pattern: |
+  缺少 name 或 bio 导致渲染失败；
+  tags 超过 4 个（只显示前 4 个）；
+  link 写成 Markdown 链接格式（应写纯文字）。
+fields:
+  required:
+    - name: name
+      description: 作者名称
+      example: "极客旅程"
+  optional:
+    - name: bio
+      description: 作者简介，说明擅长领域和关注价值
+      example: "长期写 AI 工具、内容系统和产品增长，关注怎么把复杂工作流做成可复用资产。"
+    - name: role
+      description: 作者身份标签
+      example: "独立开发者 / 内容产品"
+    - name: tags
+      description: 内容标签，用 | 分隔（最多显示 4 个）
+      example: "AI 工具 | 内容系统 | 独立产品"
+    - name: note
+      description: 底部行动引导
+      example: "关注我，持续看产品和内容系统的真实打磨过程"
+    - name: link
+      description: 展示链接（纯文字，不渲染成按钮）
+      example: "md2wechat.com"
+    - name: avatar
+      description: 头像图片 URL
+      example: "https://example.com/avatar.png"
+    - name: avatar_alt
+      description: 头像替代文字
+      example: 作者头像
+    - name: symbol
+      description: 作者卡装饰符号
+      enum: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+      example: open-book
+    - name: motion
+      description: 装饰动效；微信内效果待验证
+      enum: [none, draw, draw-stagger, draw-reverse, draw-fill, scale-in, rotate-in]
+      symbol_keys_by_value:
+        draw: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        draw-stagger: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        draw-reverse: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        draw-fill: [mountain, nested-diamonds, four-petals, rounded-seal, four-point-star, honeycomb, open-book]
+        scale-in: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        rotate-in: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+      example: none
+example: |
+  :::author-card
+  name: 极客旅程
+  role: 独立开发者 / 内容产品
+  bio: 长期写 AI 工具、内容系统和产品增长，关注怎么把复杂工作流做成可复用资产。
+  tags: AI 工具 | 内容系统 | 独立产品
+  note: 关注我，持续看产品和内容系统的真实打磨过程
+  link: md2wechat.com
+  :::
+variants:
+  - name: avatar
+    selector_field_present: avatar
+    use_when: 有可用头像图片时展示头像分支
+    example: |
+      :::author-card
+      name: 极客旅程
+      avatar: https://example.com/avatar.png
+      avatar_alt: 作者头像
+      :::
+agent_contract:
+  body_format: fields
+  required:
+  - name
+  optional:
+  - role
+  - bio
+  - tags
+  - note
+  - link
+  - avatar
+  - avatar_alt
+  - symbol
+  - motion
+  enums:
+    symbol:
+    - mountain
+    - concentric-circles
+    - nested-diamonds
+    - four-petals
+    - lens
+    - orbits
+    - archway
+    - rounded-seal
+    - four-point-star
+    - honeycomb
+    - mirrored-waves
+    - open-book
+    motion:
+    - none
+    - draw
+    - draw-stagger
+    - draw-reverse
+    - draw-fill
+    - scale-in
+    - rotate-in
+  defaults:
+    max-tags: '4'
+    link: plain-text
+  invalid:
+  - blank-name
+  ignored:
+  - tags-after-4
+  - unknown-fields
+  legacy:
+  - json-object
+  applicability: {}
+metadata:
+  author: md2wechat
+  provenance: builtin
+  inspired_by: "advanced-layout-modules-guide.md#author-card"

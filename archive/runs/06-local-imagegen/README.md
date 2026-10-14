@@ -21,7 +21,7 @@
 | `04-wide.png` | 1024×768 | 批量模式 · task-03（横版） |
 | `05-via-gemini.png` | 1440×1440 | `--provider google` → `/v1beta/models/gemini-3-pro-image:generateContent` |
 | `06-via-dashscope.png` | 1024×1024 | `--provider dashscope` → `/api/v1/services/aigc/multimodal-generation/generation` |
-| `07-via-edits.png` | 1920×2118 | `POST /v1/images/edits`（multipart，参考图 + 文案） |
+| `07-via-edits.jpg` | 1920×2118 | `POST /v1/images/edits`（multipart，参考图 + 文案） |
 | `gallery/` | — | 服务侧的出图记录（同一个文件，保留服务端命名便于对照） |
 
 - `prompts/` — 每个图的提示词文件（遵循 SKILL.md 要求的 `NN-{type}-[slug].md` 命名）
@@ -61,7 +61,7 @@ HTTP 200, 359041 字节                                           → 1920×2118
 [gen #3] img-003-1024x1024.png  theme=swiss  title="一次幻觉的四步生成过程"      545ms  (76KB)
 [gemini #1] gemini-001-1440x1440.png  theme=swiss                              759ms
 [dashscope #2] wanx-002-1024x1024.png  theme=editorial  ref=false              519ms
-[edit #1] edit-001-1920x2118.png  refs=1  theme=swiss                          (330KB)
+[edit #1] edit-001-1920x2118.jpg  refs=1  theme=swiss                          (330KB)
 ```
 
 **单张 0.5–0.9 秒，无网络请求，无 API Key。**

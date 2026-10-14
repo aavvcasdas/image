@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>大模型的食量 · 对数阶梯</title>
+<style>
+/* 设计语言：editorial（纸白 / 墨黑 / 单一强调色）
+   场景：读者站在一把对数刻度尺前，四级台阶是四代 GPT 的参数量。
+   台阶高度 = (log10(参数量) - 7.5) / 5 * 1040，全部数值见下方 SVG 内联标注。 */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1920px;overflow:hidden}
+body{
+  background:#f7f4ec;color:#14110c;
+  font-family:'Noto Sans SC',sans-serif;
+  -webkit-font-smoothing:antialiased;
+  padding:84px 96px 72px;display:flex;flex-direction:column;
+}
+.kicker{font-family:'Noto Sans SC';font-size:22px;font-weight:700;letter-spacing:.22em;color:#8a7f6d;text-transform:uppercase}
+h1{font-family:'Noto Serif SC',serif;font-size:104px;font-weight:700;line-height:1.06;letter-spacing:-.02em;margin:26px 0 0}
+h1 em{font-style:normal;color:#b23c17}
+.lede{font-size:29px;line-height:1.65;color:#4a4237;margin-top:28px;max-width:30ch}
+.rule{height:3px;background:#14110c;margin:40px 0 0;width:100%}
+.chart{margin-top:8px}
+svg{display:block;width:100%;height:auto}
+.foot{margin-top:auto;border-top:1px solid #cfc6b4;padding-top:22px;display:flex;justify-content:space-between;gap:40px;align-items:flex-end}
+.foot p{font-size:20px;line-height:1.6;color:#6c6252}
+.foot .src{font-size:19px;color:#8a7f6d;text-align:right;white-space:nowrap}
+</style>
+</head>
+<body>
+  <div class="kicker">Scale · 大模型参数量 · 2018–2023</div>
+  <h1 data-hero>六年，<br>涨了 <em>1.5 万倍</em></h1>
+  <p class="lede">从 GPT-1 到 GPT-4，模型规模跨过了四个数量级。柱子按<strong>对数刻度</strong>画，否则第一根柱子会小到看不见。</p>
+  <div class="rule"></div>
+
+  <div class="chart">
+  <!-- 坐标：宽 888（1080-96*2 视口内），基线 y=1030，图高 1080 -->
+  <svg viewBox="0 0 888 1080" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="layers" width="10" height="10" patternUnits="userSpaceOnUse">
+        <line x1="0" y1="9.5" x2="10" y2="9.5" stroke="rgba(255,255,255,.28)" stroke-width="1.6"/>
+      </pattern>
+    </defs>
+
+    <!-- 对数刻度：h = (log10(v) - 7.5) / 5 * 900，基线 y=1030
+         100M→y940 · 1B→y760 · 10B→y580 · 100B→y400 · 1T→y220 -->
+    <g stroke="#ddd4c2" stroke-width="1.5">
+      <line x1="96" y1="940" x2="888" y2="940"/>
+      <line x1="96" y1="760" x2="888" y2="760"/>
+      <line x1="96" y1="580" x2="888" y2="580"/>
+      <line x1="96" y1="400" x2="888" y2="400"/>
+      <line x1="96" y1="220" x2="888" y2="220"/>
+    </g>
+    <g font-family="'Noto Sans SC'" font-size="18" fill="#a99e8b">
+      <text x="8" y="934">100M</text>
+      <text x="8" y="754">1B</text>
+      <text x="8" y="574">10B</text>
+      <text x="8" y="394">100B</text>
+      <text x="8" y="214">1T</text>
+    </g>
+
+    <line x1="96" y1="1030" x2="888" y2="1030" stroke="#14110c" stroke-width="3"/>
+
+    <!-- 台阶：x = 90 + i*200，宽 160，中心 170/370/570/770 -->
+    <g>
+      <rect x="90" y="928" width="160" height="102" rx="6" fill="#3f4a6b"/>
+      <rect x="90" y="928" width="160" height="102" rx="6" fill="url(#layers)"/>
+      <text x="90" y="896" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#14110c">117M</text>
+      <text x="90" y="866" font-size="20" fill="#6c6252">GPT-1 · 2018</text>
+    </g>
+    <g>
+      <rect x="290" y="728" width="160" height="302" rx="6" fill="#2f5f8f"/>
+      <rect x="290" y="728" width="160" height="302" rx="6" fill="url(#layers)"/>
+      <text x="290" y="696" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#14110c">1.5B</text>
+      <text x="290" y="666" font-size="20" fill="#6c6252">GPT-2 · 2019</text>
+    </g>
+    <g>
+      <rect x="490" y="356" width="160" height="674" rx="6" fill="#1f4bd8"/>
+      <rect x="490" y="356" width="160" height="674" rx="6" fill="url(#layers)"/>
+      <text x="490" y="324" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#14110c">175B</text>
+      <text x="490" y="294" font-size="20" fill="#6c6252">GPT-3 · 2020</text>
+    </g>
+    <g>
+      <rect x="690" y="174" width="160" height="856" rx="6" fill="#b23c17"/>
+      <rect x="690" y="174" width="160" height="856" rx="6" fill="url(#layers)"/>
+      <text x="690" y="142" font-family="'Noto Serif SC'" font-size="30" font-weight="700" fill="#b23c17">~1.8T</text>
+      <text x="690" y="112" font-size="20" fill="#6c6252">GPT-4 · 2023*</text>
+    </g>
+
+    <!-- 倍数标注 -->
+    <path d="M 170 928 L 770 174" stroke="#b23c17" stroke-width="1.6" stroke-dasharray="7 6" opacity=".5" fill="none"/>
+    <rect x="316" y="536" width="266" height="48" rx="24" fill="#14110c"/>
+    <text x="449" y="568" font-size="22" font-weight="700" fill="#f7f4ec" text-anchor="middle">× 15385 ≈ 1.5 万倍</text>
+  </svg>
+  </div>
+
+  <div class="foot">
+    <p>纵轴为<strong>对数刻度</strong>（每格 = 10 倍），柱子高度代表数量级而非线性倍数，否则 GPT-1 将不足 1 像素。<br>
+       * GPT-4 参数量未公开，图中 ~1.8T 为业界流传估计值，非官方数字。</p>
+    <div class="src">数据来源：OpenAI 各代技术报告 / 论文<br>制图：html + svg 手写 · 纯代码渲染</div>
+  </div>
+</body>
+</html>

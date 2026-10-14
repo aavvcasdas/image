@@ -1,0 +1,284 @@
+schema_version: "1"
+name: hero
+lifecycle: recommended
+body_format: fields
+version: "1.0.0"
+since: "1.5.0"
+category: opening
+serves: [attention, readability]
+content_types: [opinion, announcement, manifesto, product-launch]
+industry: [general]
+tags: [opening, hero, first-screen]
+position: opening
+input_positions: [body-kv]
+when_to_use: |
+  文章开篇第一屏需要让读者在 3 秒内判断这篇值不值得读。
+  适合观点文、产品发布、重大宣布、品牌主张。
+when_not_to_use: |
+  纯流水信息（日报、周报）、纯数据报告（用 metrics）、
+  教程类（用 part + toc）。
+pairs_well_with: [verdict, audience-fit, toc]
+avoid_combining_with: [hero]
+anti_pattern: |
+  把 hero 当 banner 放每个章节开头；
+  title 写口水话不写判断；
+  缺少 title 导致渲染失败。
+fields:
+  required:
+    - name: title
+      description: 主标题，必须是一句判断或承诺
+      example: "公众号排版的真问题不是好不好看"
+  optional:
+    - name: variant
+      description: 结构变体
+      enum: [editorial, briefing, story, masthead, journal, seal, orbit]
+      default: editorial
+      example: editorial
+    - name: eyebrow
+      description: 标签词，定位文章类别
+      example: "深度观察"
+    - name: meta
+      description: 阅读时长等元信息
+      example: "8 min read"
+    - name: kicker
+      description: 标题前的引导判断
+      applies_to: [editorial, briefing, story]
+      example: "先把判断讲清楚"
+    - name: subtitle
+      description: 副标题，对主标题补一刀
+      example: "是读者愿不愿意读完"
+    - name: points
+      description: 简报或故事要点，用 | 分隔
+      applies_to: [editorial, briefing, story]
+      example: "契约校准 | 真实渲染 | 发布门禁"
+    - name: image
+      description: 辅助图片 URL
+      applies_to: [editorial, briefing, story]
+      example: "https://example.com/hero.png"
+    - name: brand
+      description: 品牌名称
+      example: md2wechat
+    - name: tags
+      description: 标签，用 | 分隔
+      applies_to: [editorial, briefing, story]
+      example: "开场 | 判断"
+    - name: symbol
+      description: 品牌开场标题装饰符号
+      enum: [spark-solid, spark-outline, diamond-solid, diamond-outline, reference-mark, asterism, double-circle, circle, square-solid, square-outline, star, infinity, mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+      applies_to: [masthead, journal, seal, orbit]
+      value_applies_to:
+        spark-solid: [masthead]
+        spark-outline: [masthead]
+        diamond-solid: [masthead]
+        diamond-outline: [masthead]
+        reference-mark: [masthead]
+        asterism: [masthead]
+        double-circle: [masthead]
+        circle: [masthead]
+        square-solid: [masthead]
+        square-outline: [masthead]
+        star: [masthead]
+        infinity: [masthead]
+      example: spark-solid
+    - name: motion
+      description: 品牌开场装饰动效；不支持的符号组合回退静态，微信内动效待验证
+      enum: [none, draw, draw-stagger, draw-reverse, draw-fill, scale-in, rotate-in, focus-in, wipe-in, stamp-in]
+      default: none
+      applies_to: [masthead, journal, seal, orbit]
+      value_applies_to:
+        stamp-in: [seal]
+      symbol_keys_by_value:
+        draw: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        draw-stagger: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        draw-reverse: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        draw-fill: [mountain, nested-diamonds, four-petals, rounded-seal, four-point-star, honeycomb, open-book]
+        scale-in: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        rotate-in: [mountain, concentric-circles, nested-diamonds, four-petals, lens, orbits, archway, rounded-seal, four-point-star, honeycomb, mirrored-waves, open-book]
+        stamp-in: [rounded-seal]
+      example: none
+  output_order: [variant, eyebrow, meta, kicker, title, subtitle, points, image, symbol, motion, brand, tags]
+variants:
+  - name: editorial
+    use_when: 观点文开场先给出判断
+    required: [title]
+  - name: briefing
+    use_when: 报告开场需要列出导读
+    required: [title]
+    example: |
+      :::hero
+      variant: briefing
+      title: 本周产品简报
+      points: 契约校准 | 真实渲染 | 发布门禁
+      :::
+  - name: story
+    use_when: 案例开场需要先建立场景
+    required: [title]
+    example: |
+      :::hero
+      variant: story
+      kicker: 一篇草稿如何变成可发布高级稿
+      title: 好文章让读者更快看见重点
+      :::
+  - name: masthead
+    use_when: 极简开场只保留标题、摘要和装饰符号
+    defaults:
+      symbol: spark-solid
+    required: [title]
+    example: |
+      :::hero
+      variant: masthead
+      title: 先让读者看见这篇文章的主判断
+      symbol: spark-solid
+      :::
+  - name: journal
+    use_when: 使用刊物式品牌开场
+    defaults:
+      symbol: rounded-seal
+    required: [title]
+    example: |
+      :::hero
+      variant: journal
+      title: 本期品牌刊头
+      symbol: rounded-seal
+      :::
+  - name: seal
+    use_when: 使用印章式品牌开场
+    defaults:
+      symbol: rounded-seal
+    required: [title]
+    example: |
+      :::hero
+      variant: seal
+      title: 这一期的主题
+      symbol: rounded-seal
+      :::
+  - name: orbit
+    use_when: 使用轨道式品牌开场
+    defaults:
+      symbol: orbits
+    required: [title]
+    example: |
+      :::hero
+      variant: orbit
+      title: 围绕真正的问题
+      symbol: orbits
+      :::
+example: |
+  :::hero
+  eyebrow: 深度观察
+  meta: 8 min read
+  kicker: 先把判断讲清楚
+  title: 高级排版服务阅读决策
+  subtitle: 主题决定气质，模块决定读者能不能看懂、记住和行动
+  brand: md2wechat
+  tags: 开场 | 判断
+  :::
+agent_contract:
+  body_format: fields
+  required:
+  - title
+  optional:
+  - variant
+  - eyebrow
+  - meta
+  - subtitle
+  - brand
+  - kicker
+  - points
+  - image
+  - tags
+  - symbol
+  - motion
+  enums:
+    variant:
+    - editorial
+    - briefing
+    - story
+    - masthead
+    - journal
+    - seal
+    - orbit
+    symbol:
+    - spark-solid
+    - spark-outline
+    - diamond-solid
+    - diamond-outline
+    - reference-mark
+    - asterism
+    - double-circle
+    - circle
+    - square-solid
+    - square-outline
+    - star
+    - infinity
+    - mountain
+    - concentric-circles
+    - nested-diamonds
+    - four-petals
+    - lens
+    - orbits
+    - archway
+    - rounded-seal
+    - four-point-star
+    - honeycomb
+    - mirrored-waves
+    - open-book
+    motion:
+    - none
+    - draw
+    - draw-stagger
+    - draw-reverse
+    - draw-fill
+    - scale-in
+    - rotate-in
+    - focus-in
+    - wipe-in
+    - stamp-in
+  defaults:
+    variant: editorial
+    masthead.symbol: spark-solid
+    journal.symbol: rounded-seal
+    seal.symbol: rounded-seal
+    orbit.symbol: orbits
+    motion: none
+  invalid:
+  - blank-title
+  ignored:
+  - masthead.kicker
+  - masthead.points
+  - masthead.image
+  - masthead.tags
+  - non-brand.symbol
+  legacy:
+  - case-folded-variant
+  applicability:
+    image:
+    - editorial
+    - briefing
+    - story
+    kicker:
+    - editorial
+    - briefing
+    - story
+    points:
+    - editorial
+    - briefing
+    - story
+    symbol:
+    - masthead
+    - journal
+    - seal
+    - orbit
+    tags:
+    - editorial
+    - briefing
+    - story
+    motion:
+    - masthead
+    - journal
+    - seal
+    - orbit
+metadata:
+  author: md2wechat
+  provenance: builtin
+  inspired_by: "advanced-layout-modules-guide.md#hero"

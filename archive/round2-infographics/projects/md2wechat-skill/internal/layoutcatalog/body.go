@@ -1,0 +1,984 @@
+package layoutcatalog
+
+import (
+	"fmt"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+	"unicode/utf8"
+)
+
+var markdownImageLineRE = regexp.MustCompile(`!\[[^\]]*\]\((https?://[^)\s]+|<https?://[^>]+>)\)`)
+
+type bodyValidationIssue struct {
+	field   string
+	message string
+	cause   error
+}
+
+type bodyField struct {
+	name  string
+	value string
+}
+
+type bodyFacts struct {
+	fields      []bodyField
+	fieldValues map[string][]string
+	fieldTypes  map[string][]string
+	jsonItems   []jsonItemFacts
+	rows        [][]string
+	imageCount  int
+	itemCount   int
+}
+
+func validateBlockBody(spec *LayoutSpec, body []string) []bodyValidationIssue {
+	formats := append([]string{spec.BodyFormat}, spec.CompatibleBodyFormats...)
+	var best []bodyValidationIssue
+	bestParseIssues := 0
+	for i, format := range formats {
+		facts, parseIssues := parseBodyFacts(spec, format, body)
+		issues := parseIssues
+		if len(parseIssues) == 0 {
+			issues = append(issues, validateBodyFacts(spec, format, facts)...)
+			// Compatibility formats preserve old syntax only. Once the primary
+			// syntax parsed, its field and enum validation is authoritative and
+			// must not be bypassed by a looser legacy format.
+			if i == 0 && len(issues) != 0 {
+				return issues
+			}
+		}
+		if len(issues) == 0 {
+			return nil
+		}
+		if i == 0 || len(parseIssues) < bestParseIssues {
+			best = issues
+			bestParseIssues = len(parseIssues)
+		}
+	}
+	if len(best) == 0 {
+		best = []bodyValidationIssue{{message: "body did not match an accepted format"}}
+	}
+	if len(formats) > 1 {
+		best[0].message += fmt.Sprintf(" (accepted formats: %s)", strings.Join(formats, ", "))
+	}
+	return best
+}
+
+func parseBodyFacts(spec *LayoutSpec, format string, body []string) (bodyFacts, []bodyValidationIssue) {
+	facts := newBodyFacts()
+	switch format {
+	case BodyFormatFields, "":
+		return parseFieldsBody(spec.Fields, body)
+	case BodyFormatMarkdownFields:
+		return parseMarkdownFieldsBody(spec.Fields, body)
+	case BodyFormatFieldsMarkdown:
+		return parseFieldsMarkdownBody(spec, body)
+	case BodyFormatJSONObject, BodyFormatJSONArray:
+		fields, types, items, err := parseJSONBodyData(body, format)
+		if err != nil {
+			return facts, []bodyValidationIssue{{message: err.Error()}}
+		}
+		for name, value := range fields {
+			facts.fields = append(facts.fields, bodyField{name: name, value: value})
+			facts.fieldValues[name] = append(facts.fieldValues[name], value)
+		}
+		facts.fieldTypes = types
+		facts.jsonItems = items
+		facts.itemCount = len(items)
+		return facts, nil
+	case BodyFormatRows:
+		return parseRowsBody(spec, body)
+	case BodyFormatMarkdownImages:
+		facts.imageCount = countMarkdownImages(body)
+		facts.itemCount = facts.imageCount
+		return facts, nil
+	case BodyFormatSplit:
+		return parseSplitBody(spec.Body, body)
+	case BodyFormatLines:
+		return parseLinesBody(spec.Body, body)
+	case BodyFormatDialogue:
+		return parseDialogueBody(spec.Body, body)
+	default:
+		return facts, []bodyValidationIssue{{message: fmt.Sprintf("unsupported body_format %q", format)}}
+	}
+}
+
+func parseFieldsMarkdownBody(spec *LayoutSpec, body []string) (bodyFacts, []bodyValidationIssue) {
+	separator := "---"
+	if spec.Body != nil && spec.Body.Separator != "" {
+		separator = spec.Body.Separator
+	}
+	boundary := -1
+	var fence markdownFence
+	for i, raw := range body {
+		line := strings.TrimRight(raw, "\r")
+		if fence.consume(line) {
+			continue
+		}
+		if strings.TrimSpace(line) == separator {
+			boundary = i
+			break
+		}
+	}
+	if boundary < 0 {
+		return newBodyFacts(), []bodyValidationIssue{{message: "fields_markdown body requires a standalone separator", cause: ErrInvalidFieldValue}}
+	}
+	facts, issues := parseFieldsBody(spec.Fields, body[:boundary])
+	if len(issues) > 0 {
+		return facts, issues
+	}
+	if !hasNonEmptyLine(body[boundary+1:]) {
+		return facts, []bodyValidationIssue{{message: "fields_markdown body requires non-empty Markdown after separator", cause: ErrInvalidFieldValue}}
+	}
+	fence = markdownFence{}
+	for _, raw := range body[boundary+1:] {
+		line := strings.TrimRight(raw, "\r")
+		if fence.consume(line) {
+			continue
+		}
+		if nestedExpandDirective(strings.TrimSpace(line)) {
+			return facts, []bodyValidationIssue{{message: "fields_markdown body does not support nested directives", cause: ErrInvalidFieldValue}}
+		}
+	}
+	if fence.length > 0 {
+		return facts, []bodyValidationIssue{{message: "fields_markdown body has an unterminated Markdown code fence", cause: ErrInvalidFieldValue}}
+	}
+	facts.itemCount = 1
+	return facts, nil
+}
+
+func parseMarkdownFieldsBody(fields *FieldsSpec, body []string) (bodyFacts, []bodyValidationIssue) {
+	facts := newBodyFacts()
+	for _, raw := range body {
+		line := strings.TrimSpace(strings.TrimRight(raw, "\r"))
+		if line == "" {
+			continue
+		}
+		if name, value, ok := parseDeclaredField(fields, line); ok {
+			facts.addField(name, value)
+			continue
+		}
+		if markdownImageLineRE.MatchString(line) {
+			facts.imageCount++
+			continue
+		}
+		return facts, []bodyValidationIssue{{message: "markdown fields body requires a declared field or Markdown image"}}
+	}
+	return facts, nil
+}
+
+func parseFieldsBody(fields *FieldsSpec, body []string) (bodyFacts, []bodyValidationIssue) {
+	facts := newBodyFacts()
+	for _, raw := range body {
+		line := strings.TrimSpace(strings.TrimRight(raw, "\r"))
+		if line == "" {
+			continue
+		}
+		idx := strings.Index(line, ":")
+		if idx <= 0 {
+			return facts, []bodyValidationIssue{{message: "fields body lines must use key: value syntax", cause: ErrInvalidFieldValue}}
+		}
+		name := strings.TrimSpace(line[:idx])
+		if !isDeclaredField(fields, name) {
+			return facts, []bodyValidationIssue{{field: name, message: fmt.Sprintf("unknown field %q", name), cause: ErrInvalidFieldValue}}
+		}
+		facts.addField(name, strings.TrimSpace(line[idx+1:]))
+	}
+	return facts, nil
+}
+
+func newBodyFacts() bodyFacts {
+	return bodyFacts{fieldValues: map[string][]string{}, fieldTypes: map[string][]string{}}
+}
+
+func (facts *bodyFacts) addField(name, value string) {
+	facts.fields = append(facts.fields, bodyField{name: name, value: value})
+	facts.fieldValues[name] = append(facts.fieldValues[name], value)
+	facts.fieldTypes[name] = append(facts.fieldTypes[name], "string")
+}
+
+func parseDeclaredField(fields *FieldsSpec, line string) (string, string, bool) {
+	if fields == nil {
+		return "", "", false
+	}
+	line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+	idx := strings.Index(line, ":")
+	if idx <= 0 {
+		return "", "", false
+	}
+	name := strings.TrimSpace(line[:idx])
+	if !isDeclaredField(fields, name) {
+		return "", "", false
+	}
+	return name, strings.TrimSpace(line[idx+1:]), true
+}
+
+func isDeclaredField(fields *FieldsSpec, name string) bool {
+	if fields == nil {
+		return false
+	}
+	for _, field := range allFieldSpecs(fields) {
+		if field.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func allFieldSpecs(fields *FieldsSpec) []FieldSpec {
+	if fields == nil {
+		return nil
+	}
+	declared := append(append([]FieldSpec{}, fields.Required...), fields.Optional...)
+	return append(declared, fields.Compatibility...)
+}
+
+func parseRowsBody(spec *LayoutSpec, body []string) (bodyFacts, []bodyValidationIssue) {
+	facts := newBodyFacts()
+	if spec.Rows == nil {
+		return facts, []bodyValidationIssue{{message: "rows body requires rows schema"}}
+	}
+	delimiter := spec.Rows.Delimiter
+	if delimiter == "" {
+		delimiter = "|"
+	}
+	for _, line := range body {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if line == "" {
+			continue
+		}
+		if name, value, ok := parseDeclaredField(spec.Fields, line); ok {
+			facts.addField(name, value)
+			continue
+		}
+		facts.itemCount++
+		cells := strings.Split(line, delimiter)
+		if len(cells) < spec.Rows.MinColumns {
+			return facts, []bodyValidationIssue{{message: fmt.Sprintf("row requires at least %d columns", spec.Rows.MinColumns), cause: ErrMissingRequiredField}}
+		}
+		if spec.Rows.MaxColumns > 0 && len(cells) > spec.Rows.MaxColumns {
+			return facts, []bodyValidationIssue{{message: fmt.Sprintf("row allows at most %d columns", spec.Rows.MaxColumns), cause: ErrInvalidFieldValue}}
+		}
+		for i := 0; i < spec.Rows.MinColumns; i++ {
+			if strings.TrimSpace(cells[i]) == "" {
+				return facts, []bodyValidationIssue{{message: fmt.Sprintf("row column %d must not be empty", i+1)}}
+			}
+		}
+		row := make([]string, len(cells))
+		for i, cell := range cells {
+			row[i] = strings.TrimSpace(cell)
+		}
+		facts.rows = append(facts.rows, row)
+	}
+	if facts.itemCount == 0 {
+		return facts, []bodyValidationIssue{{message: "rows module requires at least one data row"}}
+	}
+	return facts, nil
+}
+
+func parseSplitBody(bodySpec *BodySpec, body []string) (bodyFacts, []bodyValidationIssue) {
+	facts := newBodyFacts()
+	separator := "---"
+	if bodySpec != nil && bodySpec.Separator != "" {
+		separator = bodySpec.Separator
+	}
+	separatorIndex := -1
+	for i, line := range body {
+		if strings.TrimSpace(strings.TrimRight(line, "\r")) == separator {
+			if separatorIndex >= 0 {
+				return facts, []bodyValidationIssue{{message: "split body requires exactly one standalone separator"}}
+			}
+			separatorIndex = i
+		}
+	}
+	if separatorIndex < 0 {
+		return facts, []bodyValidationIssue{{message: "split body requires a standalone separator"}}
+	}
+	if !hasNonEmptyLine(body[:separatorIndex]) || !hasNonEmptyLine(body[separatorIndex+1:]) {
+		return facts, []bodyValidationIssue{{message: "split body requires two non-empty sides"}}
+	}
+	facts.itemCount = 2
+	return facts, nil
+}
+
+func parseLinesBody(bodySpec *BodySpec, body []string) (bodyFacts, []bodyValidationIssue) {
+	facts := newBodyFacts()
+	separator := ""
+	var allowedPrefixes []string
+	if bodySpec != nil {
+		separator = bodySpec.Separator
+		allowedPrefixes = bodySpec.AllowedPrefixes
+	}
+	for _, line := range body {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if line == "" {
+			continue
+		}
+		if len(allowedPrefixes) > 0 {
+			matched := false
+			for _, prefix := range allowedPrefixes {
+				if strings.HasPrefix(line, prefix) && strings.TrimSpace(strings.TrimPrefix(line, prefix)) != "" {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return facts, []bodyValidationIssue{{message: fmt.Sprintf("line must use one of prefixes %v", allowedPrefixes)}}
+			}
+		}
+		parts := []string{line}
+		if separator != "" {
+			parts = strings.Split(line, separator)
+		}
+		for _, part := range parts {
+			if strings.TrimSpace(part) != "" {
+				facts.itemCount++
+			}
+		}
+	}
+	return facts, nil
+}
+
+func parseDialogueBody(bodySpec *BodySpec, body []string) (bodyFacts, []bodyValidationIssue) {
+	facts := newBodyFacts()
+	for _, line := range body {
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if line == "" {
+			continue
+		}
+		idx := strings.Index(line, ":")
+		separatorWidth := len(":")
+		fullWidthSeparator := false
+		if fullWidth := strings.Index(line, "："); idx < 0 || (fullWidth >= 0 && fullWidth < idx) {
+			idx = fullWidth
+			separatorWidth = len("：")
+			fullWidthSeparator = true
+		}
+		if idx < 0 {
+			return facts, []bodyValidationIssue{{message: "dialogue line requires a speaker prefix"}}
+		}
+		prefix := strings.TrimSpace(line[:idx])
+		value := strings.TrimSpace(line[idx+separatorWidth:])
+		if prefix == "" {
+			return facts, []bodyValidationIssue{{message: "dialogue speaker prefix must not be empty"}}
+		}
+		if value == "" {
+			return facts, []bodyValidationIssue{{field: prefix, message: "dialogue line must not be empty"}}
+		}
+		configured := containsString(normalizedDialoguePrefixes(bodySpec), prefix)
+		if configured && fullWidthSeparator {
+			return facts, []bodyValidationIssue{{field: prefix, message: "configured dialogue prefixes require an ASCII colon"}}
+		}
+		if !configured {
+			if bodySpec == nil || !bodySpec.AllowNamedSpeakers {
+				return facts, []bodyValidationIssue{{field: prefix, message: fmt.Sprintf("dialogue prefix %q is not allowed", prefix)}}
+			}
+			if !fullWidthSeparator {
+				return facts, []bodyValidationIssue{{field: prefix, message: "legacy named speakers require a full-width colon"}}
+			}
+		}
+		facts.addField(prefix, value)
+		facts.itemCount++
+	}
+	return facts, nil
+}
+
+func normalizedDialoguePrefixes(bodySpec *BodySpec) []string {
+	if bodySpec == nil {
+		return nil
+	}
+	prefixes := make([]string, 0, len(bodySpec.AllowedPrefixes))
+	for _, prefix := range bodySpec.AllowedPrefixes {
+		if normalized := normalizeDialoguePrefix(prefix); normalized != "" {
+			prefixes = append(prefixes, normalized)
+		}
+	}
+	return prefixes
+}
+
+func normalizeDialoguePrefix(prefix string) string {
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(prefix), ":"), "："))
+}
+
+func validateBodyFacts(spec *LayoutSpec, format string, facts bodyFacts) []bodyValidationIssue {
+	var issues []bodyValidationIssue
+	if spec.Body != nil {
+		if format == BodyFormatMarkdownFields || format == BodyFormatDialogue {
+			issues = append(issues, validateRequiredPairs(spec.Body.RequiredPairs, facts, format == BodyFormatDialogue)...)
+		}
+		if format == BodyFormatMarkdownFields && spec.Body.Group != nil {
+			issues = append(issues, validateFieldGroups(spec.Body.Group, facts.fields)...)
+		}
+		if format == BodyFormatMarkdownImages || format == BodyFormatMarkdownFields {
+			if facts.imageCount < spec.Body.MinImages {
+				issues = append(issues, bodyValidationIssue{message: fmt.Sprintf("body requires at least %d image(s)", spec.Body.MinImages)})
+			}
+			if spec.Body.MaxImages > 0 && facts.imageCount > spec.Body.MaxImages {
+				issues = append(issues, bodyValidationIssue{message: fmt.Sprintf("body allows at most %d image(s)", spec.Body.MaxImages)})
+			}
+		}
+		if (format == BodyFormatMarkdownImages || format == BodyFormatLines || format == BodyFormatDialogue) && facts.itemCount < spec.Body.MinItems {
+			issues = append(issues, bodyValidationIssue{message: fmt.Sprintf("body requires at least %d items", spec.Body.MinItems)})
+		}
+	}
+	if formatSupportsDeclaredFields(format) {
+		if format == BodyFormatJSONArray && len(facts.jsonItems) > 0 {
+			for index, item := range facts.jsonItems {
+				itemIssues := validateStructuredFields(spec, item.values, item.types)
+				for _, issue := range itemIssues {
+					issue.message = fmt.Sprintf("item %d: %s", index+1, issue.message)
+					issues = append(issues, issue)
+				}
+			}
+			return issues
+		}
+		issues = append(issues, validateStructuredFields(spec, facts.fieldValues, facts.fieldTypes)...)
+	}
+	if format == BodyFormatRows {
+		issues = append(issues, validateRowSchema(spec, facts.rows, facts.fieldValues)...)
+	}
+	return issues
+}
+
+func validateStructuredFields(spec *LayoutSpec, values, types map[string][]string) []bodyValidationIssue {
+	var issues []bodyValidationIssue
+	issues = append(issues, validateUnknownStructuredFields(spec.Fields, types)...)
+	active, selectorPresent, selectorIssues := resolveEffectiveVariant(spec, values)
+	issues = append(issues, selectorIssues...)
+	fieldIssues := validateFields(spec.Fields, spec.Variants, values, types, !selectorPresent, active)
+	for _, issue := range fieldIssues {
+		duplicateSelectorError := false
+		for _, selectorIssue := range selectorIssues {
+			if issue.field == selectorIssue.field && strings.Contains(issue.message, "must be one of") {
+				duplicateSelectorError = true
+				break
+			}
+		}
+		if !duplicateSelectorError {
+			issues = append(issues, issue)
+		}
+	}
+	if len(selectorIssues) == 0 && active != nil {
+		issues = append(issues, validateVariantFields(*active, values)...)
+	}
+	if len(selectorIssues) == 0 {
+		issues = append(issues, validateSymbolMotion(spec, values, active)...)
+	}
+	return issues
+}
+
+func validateSymbolMotion(spec *LayoutSpec, values map[string][]string, active *VariantSpec) []bodyValidationIssue {
+	if spec.Fields == nil {
+		return nil
+	}
+	field := FieldSpec{}
+	for _, candidate := range spec.Fields.Optional {
+		if candidate.Name == "motion" {
+			field = candidate
+			break
+		}
+	}
+	if len(field.SymbolKeysByValue) == 0 {
+		return nil
+	}
+	motion := lastNonEmptyValue(values["motion"])
+	if motion == "focus-in" || motion == "wipe-in" {
+		title := strings.TrimSpace(lastNonEmptyValue(values["title"]))
+		if title == "" || utf8.RuneCountInString(title) > 9 || strings.ContainsAny(title, "[*_`<>|\r\n") {
+			return []bodyValidationIssue{{field: "motion", message: fmt.Sprintf("motion %q requires a plain title of at most 9 characters", motion), cause: ErrInvalidFieldValue}}
+		}
+	}
+	allowed, constrained := field.SymbolKeysByValue[motion]
+	if !constrained {
+		return nil
+	}
+	symbol := lastNonEmptyValue(values["symbol"])
+	if symbol == "" && active != nil {
+		symbol = active.Defaults["symbol"]
+	}
+	if symbol == "" {
+		for _, candidate := range spec.Fields.Optional {
+			if candidate.Name == "symbol" {
+				symbol = candidate.Default
+				break
+			}
+		}
+	}
+	if !containsString(allowed, symbol) {
+		return []bodyValidationIssue{{field: "motion", message: fmt.Sprintf("motion %q is not effective with symbol %q", motion, symbol), cause: ErrInvalidFieldValue}}
+	}
+	return nil
+}
+
+func validateRowSchema(spec *LayoutSpec, rows [][]string, values map[string][]string) []bodyValidationIssue {
+	if spec.Rows == nil || len(spec.Rows.Schema) == 0 {
+		return nil
+	}
+	active, _, selectorIssues := resolveEffectiveVariant(spec, values)
+	var issues []bodyValidationIssue
+	for _, row := range rows {
+		for i, value := range row {
+			if i >= len(spec.Rows.Schema) {
+				break
+			}
+			field := spec.Rows.Schema[i]
+			if len(selectorIssues) > 0 {
+				field.AppliesTo = nil
+			}
+			if fieldIssues := validateFieldValue(field, nil, value, "string", active); len(fieldIssues) > 0 {
+				issues = append(issues, fieldIssues...)
+			}
+		}
+	}
+	return issues
+}
+
+func resolveEffectiveVariant(spec *LayoutSpec, values map[string][]string) (*VariantSpec, bool, []bodyValidationIssue) {
+	active, selectorPresent, selectorIssues := resolveVariant(spec.Variants, values)
+	if active == nil && len(selectorIssues) == 0 {
+		active = resolveDefaultVariant(spec.Fields, spec.Variants)
+	}
+	return active, selectorPresent, selectorIssues
+}
+
+func resolveDefaultVariant(fields *FieldsSpec, variants []VariantSpec) *VariantSpec {
+	if fields == nil {
+		return nil
+	}
+	for _, selector := range []string{"type", "variant"} {
+		for _, field := range append(append([]FieldSpec{}, fields.Required...), fields.Optional...) {
+			if field.Name != selector || strings.TrimSpace(field.Default) == "" {
+				continue
+			}
+			for i := range variants {
+				if field.Default == variants[i].Name {
+					return &variants[i]
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateUnknownStructuredFields(fields *FieldsSpec, types map[string][]string) []bodyValidationIssue {
+	declared := map[string]bool{}
+	if fields != nil {
+		for _, field := range allFieldSpecs(fields) {
+			declared[field.Name] = true
+		}
+	}
+	unknown := make([]string, 0)
+	for name := range types {
+		if declared[name] || isDeclaredFieldContainer(declared, name) {
+			continue
+		}
+		unknown = append(unknown, name)
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	sort.Strings(unknown)
+	return []bodyValidationIssue{{
+		field:   unknown[0],
+		message: fmt.Sprintf("unknown field %q", unknown[0]),
+		cause:   ErrInvalidFieldValue,
+	}}
+}
+
+func isDeclaredFieldContainer(declared map[string]bool, name string) bool {
+	prefix := name + "."
+	for field := range declared {
+		if strings.HasPrefix(field, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateVariantFields(variant VariantSpec, values map[string][]string) []bodyValidationIssue {
+	var issues []bodyValidationIssue
+	for _, name := range variant.Required {
+		if !hasNonEmptyValue(values[name]) && !compatibilityRequirementSatisfied(variant.CompatibilityRequiredAny, name, values) {
+			issues = append(issues, bodyValidationIssue{field: name, message: fmt.Sprintf("variant %s requires field %s", variant.Name, name), cause: ErrMissingRequiredField})
+		}
+	}
+	for _, group := range append(append([][]string{}, variant.RequiredAny...), variant.CompatibilityRequiredAny...) {
+		found := false
+		for _, name := range group {
+			if hasNonEmptyValue(values[name]) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			issues = append(issues, bodyValidationIssue{message: fmt.Sprintf("variant %s requires at least one of %v", variant.Name, group), cause: ErrMissingRequiredField})
+		}
+	}
+	issues = append(issues, validateFieldShapes(variant.Shapes, values)...)
+	return issues
+}
+
+func resolveVariant(variants []VariantSpec, values map[string][]string) (*VariantSpec, bool, []bodyValidationIssue) {
+	if len(variants) == 0 {
+		return nil, false, nil
+	}
+	present := false
+	for _, field := range []string{"type", "variant"} {
+		for _, value := range values[field] {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			present = true
+			if !isVariantIdentity(variants, value) {
+				return nil, true, []bodyValidationIssue{{field: field, message: fmt.Sprintf("unknown %s %q", field, value), cause: ErrInvalidFieldValue}}
+			}
+		}
+	}
+	for _, field := range []string{"type", "variant"} {
+		selector := lastNonEmptyValue(values[field])
+		if selector == "" {
+			continue
+		}
+		for i := range variants {
+			if selector == variants[i].Name || containsString(variants[i].Aliases, selector) {
+				return &variants[i], true, nil
+			}
+		}
+	}
+	return nil, present, nil
+}
+
+func formatSupportsDeclaredFields(format string) bool {
+	switch format {
+	case BodyFormatFields, BodyFormatMarkdownFields, BodyFormatFieldsMarkdown, BodyFormatJSONObject, BodyFormatJSONArray, BodyFormatRows, "":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateRequiredPairs(pairs [][2]string, facts bodyFacts, ordered bool) []bodyValidationIssue {
+	if ordered && len(pairs) > 0 {
+		for i := 0; i < len(facts.fields); i += 2 {
+			if i+1 >= len(facts.fields) {
+				for _, pair := range pairs {
+					if facts.fields[i].name == pair[0] {
+						return []bodyValidationIssue{{field: pair[1], message: fmt.Sprintf("paired field %s is required", pair[1]), cause: ErrMissingRequiredField}}
+					}
+				}
+				return []bodyValidationIssue{{field: facts.fields[i].name, message: "dialogue pair is incomplete", cause: ErrMissingRequiredField}}
+			}
+			matched := false
+			for _, pair := range pairs {
+				if facts.fields[i].name == pair[0] && facts.fields[i+1].name == pair[1] {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return []bodyValidationIssue{{field: facts.fields[i].name, message: fmt.Sprintf("dialogue fields must form ordered pairs %v", pairs), cause: ErrInvalidFieldValue}}
+			}
+		}
+		if len(facts.fields) == 0 {
+			return []bodyValidationIssue{{message: "dialogue requires at least one ordered pair", cause: ErrMissingRequiredField}}
+		}
+		return nil
+	}
+	for _, pair := range pairs {
+		left := hasNonEmptyValue(facts.fieldValues[pair[0]])
+		right := hasNonEmptyValue(facts.fieldValues[pair[1]])
+		if !left {
+			return []bodyValidationIssue{{field: pair[0], message: fmt.Sprintf("paired field %s is required", pair[0]), cause: ErrMissingRequiredField}}
+		}
+		if !right {
+			return []bodyValidationIssue{{field: pair[1], message: fmt.Sprintf("paired field %s is required", pair[1]), cause: ErrMissingRequiredField}}
+		}
+	}
+	return nil
+}
+
+func validateFieldGroups(group *FieldGroupSpec, fields []bodyField) []bodyValidationIssue {
+	var groups []map[string]string
+	for _, field := range fields {
+		if field.name == group.Start {
+			groups = append(groups, map[string]string{})
+		}
+		if len(groups) > 0 {
+			groups[len(groups)-1][field.name] = field.value
+		}
+	}
+	complete := 0
+	for _, values := range groups {
+		missing := ""
+		for _, required := range group.Required {
+			if strings.TrimSpace(values[required]) == "" {
+				missing = required
+				break
+			}
+		}
+		if missing != "" {
+			return []bodyValidationIssue{{field: missing, message: fmt.Sprintf("group field %s is required", missing), cause: ErrMissingRequiredField}}
+		}
+		complete++
+	}
+	if complete < group.Min {
+		return []bodyValidationIssue{{message: fmt.Sprintf("body requires at least %d complete group(s)", group.Min), cause: ErrMissingRequiredField}}
+	}
+	return nil
+}
+
+func validateFields(fields *FieldsSpec, variants []VariantSpec, values, types map[string][]string, applyDefaultRules bool, active *VariantSpec) []bodyValidationIssue {
+	if fields == nil {
+		return nil
+	}
+	var issues []bodyValidationIssue
+	for _, field := range fields.Required {
+		if !fieldAppliesToVariant(field, active) {
+			if len(values[field.Name]) > 0 {
+				issues = append(issues, validateFieldValue(field, variants, lastNonEmptyValue(values[field.Name]), lastNonEmptyValue(types[field.Name]), active)...)
+			}
+			continue
+		}
+		value := lastNonEmptyValue(values[field.Name])
+		if value == "" {
+			if compatibilityRequirementSatisfied(fields.CompatibilityRequiredAny, field.Name, values) {
+				continue
+			}
+			issues = append(issues, bodyValidationIssue{field: field.Name, message: "required field missing", cause: ErrMissingRequiredField})
+			continue
+		}
+		issues = append(issues, validateFieldValue(field, variants, value, lastNonEmptyValue(types[field.Name]), active)...)
+	}
+	for _, field := range fields.Optional {
+		if len(values[field.Name]) > 0 {
+			issues = append(issues, validateFieldValue(field, variants, lastNonEmptyValue(values[field.Name]), lastNonEmptyValue(types[field.Name]), active)...)
+		}
+	}
+	for _, field := range fields.Compatibility {
+		if len(values[field.Name]) > 0 {
+			issues = append(issues, validateFieldValue(field, variants, lastNonEmptyValue(values[field.Name]), lastNonEmptyValue(types[field.Name]), active)...)
+		}
+	}
+	for _, group := range fields.RequiredAny {
+		found := false
+		for _, name := range group {
+			if hasNonEmptyValue(values[name]) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			issues = append(issues, bodyValidationIssue{message: fmt.Sprintf("at least one of %v is required", group), cause: ErrMissingRequiredField})
+		}
+	}
+	if applyDefaultRules {
+		for _, name := range fields.RequiredWhenNoVariant {
+			if !hasNonEmptyValue(values[name]) {
+				issues = append(issues, bodyValidationIssue{field: name, message: "required field missing when no variant is selected", cause: ErrMissingRequiredField})
+			}
+		}
+		for _, group := range fields.RequiredAnyWhenNoVariant {
+			found := false
+			for _, name := range group {
+				if hasNonEmptyValue(values[name]) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				issues = append(issues, bodyValidationIssue{message: fmt.Sprintf("at least one of %v is required when no variant is selected", group), cause: ErrMissingRequiredField})
+			}
+		}
+	}
+	issues = append(issues, validateFieldShapes(fields.Shapes, values)...)
+	return issues
+}
+
+func compatibilityRequirementSatisfied(groups [][]string, required string, values map[string][]string) bool {
+	for _, group := range groups {
+		if !slices.Contains(group, required) {
+			continue
+		}
+		for _, name := range group {
+			if hasNonEmptyValue(values[name]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func validateFieldValue(field FieldSpec, variants []VariantSpec, value, actualType string, active *VariantSpec) []bodyValidationIssue {
+	var issues []bodyValidationIssue
+	if !fieldAppliesToVariant(field, active) {
+		effective := "no selected variant"
+		if active != nil {
+			effective = active.Name
+		}
+		return []bodyValidationIssue{{field: field.Name, message: fmt.Sprintf("field %s does not apply to variant %s", field.Name, effective), cause: ErrInvalidFieldValue}}
+	}
+	if err := checkFieldEnum(field, variants, value); err != nil {
+		issues = append(issues, bodyValidationIssue{field: field.Name, message: err.Error()})
+	}
+	if allowedVariants, constrained := field.ValueAppliesTo[value]; constrained && active != nil && !containsString(allowedVariants, active.Name) {
+		issues = append(issues, bodyValidationIssue{field: field.Name, message: fmt.Sprintf("field %s value %q does not apply to variant %s", field.Name, value, active.Name), cause: ErrInvalidFieldValue})
+	}
+	if field.ValueType == "string" {
+		if actualType == "" {
+			actualType = "string"
+		}
+		if actualType != "string" {
+			issues = append(issues, bodyValidationIssue{field: field.Name, message: fmt.Sprintf("field %s must be a string, got %s", field.Name, actualType), cause: ErrInvalidFieldValue})
+		}
+	}
+	runes := utf8.RuneCountInString(strings.TrimSpace(value))
+	if runes < field.MinRunes {
+		issues = append(issues, bodyValidationIssue{field: field.Name, message: fmt.Sprintf("field %s requires at least %d Unicode code points", field.Name, field.MinRunes), cause: ErrInvalidFieldValue})
+	}
+	if field.MaxRunes > 0 && runes > field.MaxRunes {
+		issues = append(issues, bodyValidationIssue{field: field.Name, message: fmt.Sprintf("field %s allows at most %d Unicode code points", field.Name, field.MaxRunes), cause: ErrInvalidFieldValue})
+	}
+	return issues
+}
+
+func fieldAppliesToVariant(field FieldSpec, active *VariantSpec) bool {
+	if len(field.AppliesTo) == 0 {
+		return true
+	}
+	if active == nil {
+		return containsString(field.AppliesTo, "one-line")
+	}
+	return containsString(field.AppliesTo, active.Name)
+}
+
+func validateFieldShapes(shapes []FieldShapeSpec, values map[string][]string) []bodyValidationIssue {
+	var issues []bodyValidationIssue
+	for _, shape := range shapes {
+		if shape.MaxOccurrences > 0 {
+			occurrences := 0
+			for _, value := range values[shape.Field] {
+				if strings.TrimSpace(value) != "" {
+					occurrences++
+				}
+			}
+			if occurrences > shape.MaxOccurrences {
+				issues = append(issues, bodyValidationIssue{field: shape.Field, message: fmt.Sprintf("field %s allows at most %d occurrences", shape.Field, shape.MaxOccurrences), cause: ErrInvalidFieldValue})
+			}
+		}
+		for _, value := range values[shape.Field] {
+			if strings.TrimSpace(value) == "" {
+				continue
+			}
+			rawParts := strings.Split(value, shape.Separator)
+			var parts []string
+			for _, part := range rawParts {
+				if strings.TrimSpace(part) != "" {
+					parts = append(parts, strings.TrimSpace(part))
+				}
+			}
+			if shape.MinParts > 0 && len(parts) < shape.MinParts {
+				issues = append(issues, bodyValidationIssue{field: shape.Field, message: fmt.Sprintf("field %s requires at least %d parts separated by %q", shape.Field, shape.MinParts, shape.Separator), cause: ErrInvalidFieldValue})
+				continue
+			}
+			if shape.MaxParts > 0 && len(parts) > shape.MaxParts {
+				issues = append(issues, bodyValidationIssue{field: shape.Field, message: fmt.Sprintf("field %s allows at most %d parts separated by %q", shape.Field, shape.MaxParts, shape.Separator), cause: ErrInvalidFieldValue})
+				continue
+			}
+			for _, rule := range shape.PartRules {
+				partCount := len(rawParts)
+				if rule.MinParts > 0 && partCount < rule.MinParts {
+					continue
+				}
+				if rule.MaxParts > 0 && partCount > rule.MaxParts {
+					continue
+				}
+				for _, position := range rule.RequiredPositions {
+					if position > partCount || strings.TrimSpace(rawParts[position-1]) == "" {
+						issues = append(issues, bodyValidationIssue{field: shape.Field, message: fmt.Sprintf("field %s requires non-empty part %d", shape.Field, position), cause: ErrInvalidFieldValue})
+						break
+					}
+				}
+			}
+			if shape.ItemSeparator != "" {
+				for _, part := range parts {
+					nested := strings.Split(part, shape.ItemSeparator)
+					if shape.ItemMaxParts > 0 && len(nested) > shape.ItemMaxParts {
+						issues = append(issues, bodyValidationIssue{field: shape.Field, message: fmt.Sprintf("each %s entry allows at most %d parts separated by %q", shape.Field, shape.ItemMaxParts, shape.ItemSeparator), cause: ErrInvalidFieldValue})
+						break
+					}
+					valid := len(nested) >= shape.ItemMinParts
+					for i := 0; valid && i < shape.ItemMinParts; i++ {
+						valid = strings.TrimSpace(nested[i]) != ""
+					}
+					if !valid {
+						issues = append(issues, bodyValidationIssue{field: shape.Field, message: fmt.Sprintf("each %s entry requires at least %d non-empty parts separated by %q", shape.Field, shape.ItemMinParts, shape.ItemSeparator), cause: ErrInvalidFieldValue})
+						break
+					}
+				}
+			}
+		}
+	}
+	return issues
+}
+
+func lastNonEmptyValue(values []string) string {
+	for i := len(values) - 1; i >= 0; i-- {
+		if value := strings.TrimSpace(values[i]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func checkFieldEnum(field FieldSpec, variants []VariantSpec, value string) error {
+	if (field.Name == "variant" || field.Name == "type") && isVariantIdentity(variants, value) {
+		return nil
+	}
+	return checkEnum(field, value)
+}
+
+func isVariantIdentity(variants []VariantSpec, value string) bool {
+	for _, variant := range variants {
+		if value == variant.Name || containsString(variant.Aliases, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func countMarkdownImages(body []string) int {
+	count := 0
+	for _, line := range body {
+		count += len(markdownImageLineRE.FindAllString(line, -1))
+	}
+	return count
+}
+
+func hasNonEmptyLine(lines []string) bool {
+	for _, line := range lines {
+		if strings.TrimSpace(strings.TrimRight(line, "\r")) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasNonEmptyValue(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}

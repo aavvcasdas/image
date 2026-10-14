@@ -1,117 +1,121 @@
-# AI 鸡汤 / 涨粉图文 · 纯代码渲染方案实测
+# AI 鸡汤图文 / 涨粉图文 · 代码渲染实测仓库
 
-> 目标：找一批**不需要 API 接口**、**靠代码渲染**、**近 3 个月有更新**、**star 高**的「AI 鸡汤 / 涨粉图文」创作项目，
-> 全部实跑产出成品。**模型生图的部分统一走 Arena 生图**（不再接任何第三方图像/大模型 API，也不接本地渲染服务）。
+把 GitHub 与 skill 市场上「**能批量产出图文内容**」的开源项目拉进来，**一个个真跑**，把成品图直接放进仓库。
+选品硬条件：**不需要 API Key**、**代码渲染**、**近 3 个月有更新**、**star 尽量高**。
 
-本仓库里所有成品图都是**真跑出来的**，不是截图拼贴：`runs/` 下的每一张图都能用下面命令重新生成。
-画廊页：`runs/gallery.html`（76 张）。
+> 关于生图：用户的要求是「要模型生图，但把生图那一步换成 **Arena 的生图**」。
+> 所以：本地渲染类项目直接跑；生图类技能只保留它的提示词/风格库，出图交给 Arena，
+> 再用代码把文字层叠上去。**运行期零外部图像 / 大模型 API。**
 
----
+本仓库由两轮实测合并而成：**Run 01–06**（第一批选品）与 **Run 07–12**（第二批选品，star 更高、覆盖纯代码渲染的不同技术栈）。
+两批共 **12 个项目全部实跑出成品**，画廊：`runs/gallery.html`。
 
-## 一、入选项目（6 个，全部实跑）
+## 结论速览 · Run 01–06
 
-| # | 项目 | Star | 最近更新 | 许可 | 形态 | 实跑产物 |
-|---|------|------|---------|------|------|---------|
-| 01 | [comeonzhj/Auto-Redbook-Skills](https://github.com/comeonzhj/Auto-Redbook-Skills) | **2358** | 2026-08-13 | MIT | Claude/Codex Skill + Node/Python 渲染脚本 | 4 套主题 × 6 张（含封面），1080×1440 / 2160×2880 |
-| 02 | [geekfoxcharlie/XHS-TextCard](https://github.com/geekfoxcharlie/XHS-TextCard) | 107 | 2026-08-11 | MIT | 纯前端（零后端、零 API），Canvas 渲染 | 3 套模板 × 5–6 张，1242×1656，**封面换成 Arena 生图** |
-| 03 | [pangxiaobin/MarkCardStudio](https://github.com/pangxiaobin/MarkCardStudio) | 306 | 2026-08-30 | GPL-3.0 | Vue3 + Vite 本地优先工作台（Tauri 桌面版同源） | 2 套主题 × 6 张，1080×1440，走真实「Export PNG set」 |
-| 04 | [kane50613/takumi](https://github.com/kane50613/takumi) | **3098** | 2026-10-13 | MIT / Apache-2.0 | Rust + JSX/HTML → PNG/GIF，**不需要浏览器** | 6 张金句卡 1242×1656 + **动态 GIF 封面**，含 Arena 生图底图 |
-| 05 | [qianjiazheng2023/xiaohongshu-article-cards](https://github.com/qianjiazheng2023/xiaohongshu-article-cards) | 37 | 2026-07-23 | — | Skill + 4 套卡片模板（HTML）+ 渲染/验收脚本 | 奶油信息卡 6 张轮播，1080×1440 |
-| 06 | [vercel/satori](https://github.com/vercel/satori) + `@resvg/resvg-js` | **14068** | 2026-10-13 | MPL-2.0 | HTML/CSS → SVG → PNG（Vercel OG 的底座） | 4 张金句卡，1242×1656，含 Arena 生图封面 |
+| Run | 项目（star） | 一句话 | 产出 | 状态 |
+|---|---|---|---:|---|
+| [01](runs/01-xhs-textcard) | [XHS-TextCard](https://github.com/geekfoxcharlie/XHS-TextCard)（107★） | Markdown → 小红书竖版卡片，纯前端 Canvas，12 套模板 | 12 张 1242×1656 | ✅ |
+| [02](runs/02-markcardstudio) | [MarkCard Studio](https://github.com/pangxiaobin/MarkCardStudio)（306★） | Vue3 + Tauri 桌面级排版，16 套主题，智能分页 | 24 张 1080×1440 | ✅ |
+| [03](runs/03-article-tools) | [article-tools](https://github.com/eternityspring/article-tools)（825★） | 公众号封面生成器，多配色/装饰/字体 | 3 张 1808×724 | ✅ |
+| [04](runs/04-write-then-publish) | [写了就发](https://github.com/fxyadela/write-then-publish)（569★） | 一份 Markdown → 图文卡片 + 公众号长图 | 3 张卡片 + 1 张长图 | ✅ |
+| [05](runs/05-ah-xhs-cover-title) | [ah-xhs-cover-title](https://github.com/ahang008/ah-xhs-cover-title)（179★） | 85 条爆款公式库 → 封面三行 + 代码渲染封面 | 4 张 1242×1656 | ✅ |
+| [06](runs/06-arena-imagegen) | [qiaomu-codex-imagegen](https://github.com/joeseesun/qiaomu-codex-imagegen)（131★） | 风格库编排提示词 → **Arena 生图** → 代码叠字 | 3 张 1242×1656 | ✅ |
 
-**为什么是这几个**：都满足「本地跑、不调外部 API」（`takumi` 的 API 命中是 Rust 源码里的 `image_resampler` 注释；`XHS-TextCard` 只有 README 提到「官方在线版有 AI 能力」，开源版明确声明零 API Key），且都是 2026-07-13 之后仍有提交。
+## 结论速览 · Run 07–12（第二批，star 更高 / 技术栈更硬）
 
-### 被排除的候选（说明理由，避免重复踩坑）
+| Run | 项目（star） | 一句话 | 产出 | 状态 |
+|---|---|---|---:|---|
+| [07](runs/07-auto-redbook-skills) | [Auto-Redbook-Skills](https://github.com/comeonzhj/Auto-Redbook-Skills)（**2358★**） | Skill + 渲染脚本，8 主题 × 4 种分页模式 | 4 套主题 × 6 张，1080×1440 / 2160×2880 | ✅ |
+| [08](runs/08-xhs-textcard) | [XHS-TextCard](https://github.com/geekfoxcharlie/XHS-TextCard)（107★） | 同一项目的**无头驱动**：选模板 → 分页 → 高清导出，封面换 Arena 生图 | 3 套模板，1242×1656 | ✅ |
+| [09](runs/09-markcard-studio) | [MarkCard Studio](https://github.com/pangxiaobin/MarkCardStudio)（306★） | 驱动真实 UI「Export PNG set」批量导出 | 2 套主题 × 6 张，1080×1440 | ✅ |
+| [10](runs/10-takumi) | [takumi](https://github.com/kane50613/takumi)（**3098★**） | Rust + JSX/HTML → PNG/**GIF**，**不需要浏览器** | 6 张金句卡 1242×1656 + 动态 GIF 封面 | ✅ |
+| [11](runs/11-xiaohongshu-article-cards) | [xiaohongshu-article-cards](https://github.com/qianjiazheng2023/xiaohongshu-article-cards)（37★） | Skill + 4 套卡片模板 + 布局验收脚本 | 奶油信息卡 6 张轮播，1080×1440 | ✅ |
+| [12](runs/12-satori) | [vercel/satori](https://github.com/vercel/satori)（**14068★**） | HTML/CSS → SVG → PNG（Vercel OG 的底座） | 4 张金句卡，1242×1656 | ✅ |
 
-| 项目 | Star | 排除原因 |
-|------|------|---------|
-| palxiao/poster-design（迅排设计） | 4914 | 以在线编辑器/服务端为主，需要部署后端与 OSS 等外部服务 |
-| fxyadela/write-then-publish | 570 | 渲染可用，但主流程绑定 Supabase 云端与账号体系 |
-| carbon-app/carbon | 36110 | 主打代码截图（视觉偏开发向），且 2026-02 后无更新，超出 3 个月窗口 |
-| 各类「文生图 / AI 排版」Skill（vox-director、ai-image-prompt-cookbook 等） | 0.1k–2.3k | 依赖图像生成 API，不符合「不需要 API 接口」 |
+**12 个全部实跑出成品。** Run 08 / 10 / 12 的封面与底图由 **Arena 生图**提供（`runs/assets/arena/`），
+其余全部零外部 API。
 
----
+## 成品预览
 
-## 二、30 秒跑通（复现）
+| 鸡汤长卡片（Run 02 · 复古报刊） | 小红书卡片（Run 01 · 书页模板） |
+|---|---|
+| ![newspaper](runs/02-markcardstudio/out/newspaper-markcard-page-2.jpg) | ![elegant](runs/01-xhs-textcard/out/starry-night-01.jpg) |
 
-```bash
-# 0) 一次性：搭出无网沙箱里的 Chromium + 中文字体环境（幂等）
-bash archive/setup/render-env.sh          # 静态 Chromium → /tmp/chromium，中文字体 → ~/.fonts
-bash setup/local-browser.sh               # 让 playwright / puppeteer 直接复用上面的 Chromium
-export LD_LIBRARY_PATH=/tmp/render-env/lib:$LD_LIBRARY_PATH
-npm i                                     # 根依赖：playwright / sharp / takumi-js
+| 公众号封面（Run 03 · 午夜） | 模型生图 + 代码叠字（Run 06） |
+|---|---|
+| ![cover](runs/03-article-tools/out/03-midnight.jpg) | ![arena](runs/06-arena-imagegen/out/01-di-gu-period.jpg) |
 
-# 01 Auto-Redbook-Skills（8 主题可选，这里跑 4 套）
-cd projects/auto-redbook-skills
-python3 scripts/render_xhs.py ../../runs/01-auto-redbook-skill/note.md \
-        -o ../../runs/01-auto-redbook-skill/out-botanical -t botanical -m separator --dpr 2
+| 图文卡片（Run 04 · 1728×2304） | 爆款公式封面（Run 05） |
+|---|---|
+| ![wtp](runs/04-write-then-publish/out/cards/layout-page-01.jpg) | ![xhs](runs/05-ah-xhs-cover-title/out/职场里最该尽-ink-red.jpg) |
 
-# 02 XHS-TextCard（可 --cover 传入 Arena 生图当封面）
-cd ../xhs-textcard
-node tools/render-cards.mjs --md ../../runs/02-xhs-textcard/note.md --template elegant-book \
-     --out ../../runs/02-xhs-textcard/elegant-book --cover ../../runs/assets/arena/03-quiet-lake.png --signature "慢下来"
+| 多主题卡片（Run 07 · 植物园主题） | 金句卡 + Arena 生图底图（Run 10 · takumi） |
+|---|---|
+| ![botanical](runs/07-auto-redbook-skills/out-botanical/card_1.jpg) | ![takumi](runs/10-takumi/01-cover-photo.jpg) |
 
-# 03 MarkCard Studio（先起开发服务器）
-cd ../markcard-studio && npm i && npm run dev -- --host 0.0.0.0 --port 5180 &
-node tools/render-cards.mjs --md ../../runs/02-xhs-textcard/note.md --theme "Warm Journal" --out ../../runs/03-markcard-studio/warm-journal
+| 信息卡轮播（Run 11 · 奶油编辑风） | HTML/CSS → PNG（Run 12 · satori） |
+|---|---|
+| ![cream](runs/11-xiaohongshu-article-cards/cream-editorial/cream-01.png) | ![satori](runs/12-satori/01-cover.jpg) |
 
-# 04 takumi（金句卡 + 动图封面，全程无浏览器）
-cd /home/user/image
-node projects/takumi/tools/quote-cards.mjs --content runs/04-takumi/quotes.json \
-     --out runs/04-takumi --bg-dir runs/assets/arena
+> 更多成品见 `runs/gallery.html`（76 张，`npm run gallery` 可重新生成）。
 
-# 06 satori（HTML/CSS → SVG → PNG，无需浏览器）
-node setup/satori-cards.mjs --content runs/06-satori/quotes.json --out runs/06-satori --bg-dir runs/assets/arena
+## 目录结构
 
-# 05 小红书轮播卡片 Skill
-cd projects/xiaohongshu-article-cards
-node tools/fill-content.mjs --template assets/cream-editorial/card-generator.html \
-     --content ../../runs/05-article-cards/content.json --out ../../runs/05-article-cards/cream-editorial.html
-CHROME_PATH=/tmp/chromium node scripts/render_cards.mjs ../../runs/05-article-cards/cream-editorial.html \
-     ../../runs/05-article-cards/cream-editorial cream
+```
+projects/              11 个 vendor 进来的上游源码（只改「取依赖」，不改渲染逻辑）
+runs/01..06/           第一批：每个项目一个 run（run.mjs + content.md + out/）
+runs/07..12/           第二批：每个项目一个 run（驱动脚本 + 复现说明 + 成品）
+runs/assets/arena/     第二批用到的 Arena 生图素材（5 张治愈系插画，留了文字安全区）
+runs/gallery.html      静态画廊（npm run gallery 生成）
+tools/browser.mjs      第一批的共用浏览器驱动层（静态服务 / Chromium 启动 / dataURL 落盘）
+setup/                 第二批的共用工具：local-browser.sh、local-chromium.cjs、satori-cards.mjs、
+                       build-gallery.mjs、optimize-images.mjs、preview-server.mjs
+archive/               更早一轮（图文卡片向）的成果，已归档，不再改动
 ```
 
-> 沙箱提示：本项目环境**没有**预装浏览器/中文字体/ffmpeg。`archive/setup/render-env.sh` 会把静态 Chromium、
-> NSS 依赖库、Noto Sans SC/Serif SC 字体全部装好；`setup/local-browser.sh` 再把它们接到 playwright 期望的路径上，
-> 因此上游脚本**一行都不用改**（`auto-redbook-skills` 直接跑、`xiaohongshu-article-cards` 只需 `CHROME_PATH`）。
+## 怎么复现
 
----
+```bash
+# 1) 一次性：搭渲染环境（Chromium + 私有 so + 中文字体），幂等
+bash archive/setup/render-env.sh
+bash setup/local-browser.sh                     # 让 playwright 直接复用上面的 Chromium
+export LD_LIBRARY_PATH=/tmp/render-env/lib:$LD_LIBRARY_PATH
+npm i                                           # 根依赖：playwright / sharp / satori / resvg / takumi-js
 
-## 三、模型生图怎么接（用户要求：把 API 换成 Arena 生图）
+# 2) 第一批（Run 01–06）
+npm run run:01
+npm run run:02        # 需先 cd projects/MarkCardStudio && npm i && npx vite build
+npm run run:03
+npm run run:04
+npm run run:05
+npm run run:06        # 底图来自 runs/06-arena-imagegen/assets（Arena 生图结果）
 
-**原则**：渲染、排版、分页、导出全部由项目自己的代码完成；**只有「需要一张图/一张底图」的地方交给 Arena 生图**。
-没有任何项目在运行时调用第三方图像 API。
+# 3) 第二批（Run 07–12）
+npm run run:07        # Auto-Redbook-Skills：8 主题任选，-t/-m/--dpr 直接调
+npm run run:08        # XHS-TextCard 无头驱动（--cover 传 Arena 生图当封面）
+npm run dev:markcard & npm run run:09   # MarkCard Studio：起 dev server 后驱动真实「Export PNG set」
+npm run run:10        # takumi：金句卡 + GIF 动图封面，全程无浏览器
+npm run run:11        # 小红书轮播卡片 Skill（填内容 → 上游渲染脚本出图）
+npm run run:12        # satori：HTML/CSS → SVG → PNG
+
+# 4) 看成品
+npm run gallery && npm run preview      # 打开 /runs/gallery.html
+```
+
+## 关于「生图 API」的处理（本仓库的硬约定）
 
 | 位置 | 接法 | 落地案例 |
 |------|------|---------|
-| 封面 / 底图 | Arena 生图产物放进 `runs/assets/arena/`，以 **dataURL 注入项目的封面配置** | `runs/02-xhs-textcard/*`（换掉模板自带封面）、`runs/04-takumi/0[126]-*.jpg`（图卡底图） |
-| 插图 | 同上，作为卡片的 `bg` / `coverImage` 字段 | `runs/04-takumi/*`、`runs/02-xhs-textcard/*` |
-| 动态封面 | takumi 直接渲染 GIF/动画 WebP，底图同样来自 Arena | `runs/04-takumi/cover-animated.gif` |
+| 封面 / 底图 | Arena 生图产物放进 `runs/assets/arena/`，以 **dataURL 注入项目的原生字段**（`coverImage` / `bg`），文字与排版仍由代码完成 | Run 08（换掉模板自带封面）、Run 10（图卡主题）、Run 12（上半版大图） |
+| 提示词 | 生图类 skill 只保留**提示词/风格库**（如 `qiaomu-codex-imagegen` 的 `suggest`/`compose`），出图交给 Arena | Run 06、Run 05（爆款公式 → 封面三行） |
+| 动态封面 | takumi 直接渲染 GIF/动画 WebP，底图同样来自 Arena | Run 10 `cover-animated.gif` |
 
-satori（Run 06）的接法同理：`photo-top` 主题把 Arena 生图铺在上半部，下半部由代码排版文字
-（`setup/satori-cards.mjs` 里把图片转成 dataURL 内联，规避 satori 的 SSRF 防护）。
+**没有任何项目在运行期调用第三方图像 / 大模型 API**；第二批的 `takumi`、`satori` 连浏览器都不需要。
 
-现有 Arena 素材：`runs/assets/arena/01-morning-window.png`、`02-sunrise-mountain.png`、`03-quiet-lake.png`、
-`04-night-city-window.png`、`05-desk-watercolor.png`（治愈系扁平/水彩插画，均留了文字安全区）。
+## 实测环境与体积说明
 
----
-
-## 四、目录结构
-
-```
-├── README.md               ← 本文件（方向 / 选品 / 复现 / Arena 接法）
-├── projects/               ← 5 个项目的 vendor 源码 + 我们加的驱动脚本（见 projects/README.md）
-├── runs/                   ← 实跑产物（01–05）+ 画廊 runs/gallery.html + Arena 素材
-├── setup/                  ← 本项目自建工具：local-browser.sh、local-chromium.cjs、build-gallery.mjs、optimize-images.mjs
-└── archive/                ← 上一轮（图文卡片方向）的完整成果，已归档，保留可回溯
-```
-
----
-
-## 五、实测环境与已知限制
-
-- 沙箱：Linux x64、Node 22、Python 3.11；**无浏览器、无中文字体、无 ffmpeg**（均已用上述脚本补齐）。
-- 中文渲染：统一使用 `~/.fonts` 的 Noto Sans SC / Noto Serif SC；Emoji 用 `NotoEmoji`（单色，不是彩色 emoji）。
-- 体积策略：`runs/**` 中大于 320KB 的成品图转成 **JPEG q90**（小红书等平台本身会二次压缩），
-  原图可用上面的命令随时重生成；转换脚本见 `setup/optimize-images.mjs`。
-- `projects/*/node_modules` 不入库（`.gitignore`），按上面命令 `npm i` 即可。
+- 沙箱：Linux x64、Node 22、Python 3.11；**无浏览器、无中文字体**（用 `archive/setup/render-env.sh` 补齐）。
+- 中文渲染统一使用 `~/.fonts` 的 Noto Sans / Serif SC。
+- 第二批成品图中大于 320KB 的按 `npm run optimize` 转为 **JPEG q90**（小红书等平台本身会二次压缩），
+  需要无损 PNG 时按各 `runs/*/README.md` 的命令重跑即可。
+- `projects/**/node_modules`、构建产物不入库。

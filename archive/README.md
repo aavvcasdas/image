@@ -17,7 +17,7 @@
 | `runs/01-baoyu-diagram/` | `rag@2x.png`（2340×1120）<br>`rag.svg` | 深色科技风系统流程图 |
 | `runs/02-guizang/` | `xhs-01-cover.png`（2160×2880）<br>`xhs-02-pipeline.png`（2160×2880） | 小红书 3:4 卡片组 |
 | `runs/03-documd/figures/` | `article-01-infographic.png`<br>`article-02-infographic.png`<br>`article-03-echarts.png`<br>`article-04-infographic.png` | 长文里的 4 张配图 |
-| `runs/03-documd/` | `article-full.png`（整篇长图）<br>`article.html`（图文一体） | 一篇完整科普长文 |
+| `runs/03-documd/` | `article-full.jpg`（整篇长图）<br>`article.html`（图文一体） | 一篇完整科普长文 |
 | `runs/04-qiaomu/` | `info-card.png`（1200×2626）<br>`info-card-1/2/3.png` | 信息卡 + 自动分页的 3 张 |
 | `runs/05-diagram-design/` | `attention.png`<br>`attention.svg` | 编辑级排版 + 独立矢量图 |
 | `runs/06-local-imagegen/` | `01-cover` `02-steps` `03-xhs-34` `04-wide` `05-via-gemini` `06-via-dashscope` `07-via-edits` | **本地生图服务产出**（见第五节） |

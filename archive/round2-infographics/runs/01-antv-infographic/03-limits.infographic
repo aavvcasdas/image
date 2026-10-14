@@ -1,0 +1,23 @@
+infographic compare-binary-horizontal-underline-text-vs
+data
+  title 大模型能做什么，不能做什么
+  desc 把它当"超级实习生"，而不是"全知词典"
+  compares
+    - label 擅长
+      children
+        - label 改写与润色
+          desc 换语气、改长短、翻译
+        - label 结构化整理
+          desc 把杂乱笔记整理成表格与清单
+        - label 代码与公式
+          desc 常见写法几乎不会拼错
+    - label 不擅长
+      children
+        - label 事实与数字
+          desc 可能编造来源与统计
+        - label 最新信息
+          desc 训练截止之后的事不知道
+        - label 精确计算
+          desc 长算式容易算错
+theme
+  palette #16a34a #e11d48

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>AI 是怎么读懂你的话的 · 科普卡片</title>
+<style>
+  /* 说明：模板 card-xiaohongshu 原示例依赖 Tailwind CDN 与 Google Fonts，
+     沙箱内不可访问，这里全部改写为内联 CSS + 本地 Noto Sans SC，渲染结果一致。 */
+  * { box-sizing: border-box; }
+  body { margin:0; background:#eef0f4; font-family:'Noto Sans SC','PingFang SC',sans-serif; padding:40px 0; -webkit-font-smoothing:antialiased; }
+  .deck { display:flex; flex-direction:column; align-items:center; gap:28px; }
+  .card {
+    width:1080px; height:1440px; border-radius:36px; overflow:hidden; position:relative;
+    padding:88px 72px; display:flex; flex-direction:column;
+    box-shadow:0 24px 60px -20px rgba(20,26,60,.22);
+  }
+  .pageno { position:absolute; top:44px; right:56px; font-size:18px; font-weight:700; letter-spacing:.12em; opacity:.42; }
+  .watermark { position:absolute; bottom:40px; right:48px; font-size:17px; opacity:.5; font-weight:500; }
+  .badge { display:inline-flex; align-items:center; gap:10px; padding:12px 22px; border-radius:999px;
+    background:rgba(255,255,255,.62); font-size:22px; font-weight:700; align-self:flex-start; }
+  .num { font-family:Georgia,serif; font-style:italic; font-size:112px; font-weight:700; line-height:.9; opacity:.32; margin-bottom:26px; }
+  h2 { font-size:66px; font-weight:900; line-height:1.12; letter-spacing:-.02em; margin:0 0 30px; }
+  .body { font-size:31px; font-weight:500; line-height:1.6; opacity:.9; }
+  .body strong { font-weight:900; }
+  .hero { font-size:118px; font-weight:900; line-height:1.02; letter-spacing:-.03em; margin:0; }
+  .illus { max-width:100%; max-height:600px; object-fit:contain; align-self:center; margin-top:auto; mix-blend-mode:multiply; }
+  .illus-box { margin-top:auto; background:#fff; border-radius:28px; padding:24px; }
+  .kicker { font-size:24px; font-weight:700; letter-spacing:.06em; opacity:.62; margin-bottom:18px; }
+  .foot { margin-top:auto; font-size:24px; opacity:.6; font-weight:600; }
+  .steps { display:flex; flex-direction:column; gap:22px; margin-top:26px; }
+  .step { display:flex; gap:20px; align-items:flex-start; }
+  .step .dot { flex:0 0 auto; width:54px; height:54px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:26px; color:#fff; }
+  .step p { margin:0; font-size:29px; font-weight:500; line-height:1.45; opacity:.92; }
+  .step b { font-weight:900; }
+
+  /* 莫兰迪蓝紫系，与配图的 indigo/cyan 呼应 */
+  .c1 { background:linear-gradient(160deg,#e9edff 0%,#c3ccf7 100%); color:#1b2150; }
+  .c2 { background:linear-gradient(160deg,#fff6e9 0%,#ffdcb4 100%); color:#3a2a12; }
+  .c3 { background:linear-gradient(160deg,#eaf6f4 0%,#bfe3dd 100%); color:#123a35; }
+  .c4 { background:linear-gradient(160deg,#f3eaff 0%,#d8c1f5 100%); color:#2c1547; }
+  .c5 { background:linear-gradient(160deg,#eef4e7 0%,#cbe0b8 100%); color:#22371a; }
+  .c6 { background:linear-gradient(160deg,#ffeef2 0%,#f8c9d8 100%); color:#421027; }
+  .c7 { background:linear-gradient(150deg,#161a33 0%,#2a2150 55%,#123043 100%); color:#f3f5ff; }
+  .c7 .badge { background:rgba(255,255,255,.14); }
+  .c7 .illus { mix-blend-mode:screen;
+    -webkit-mask-image:radial-gradient(ellipse 62% 62% at 50% 50%, #000 62%, transparent 88%);
+    mask-image:radial-gradient(ellipse 62% 62% at 50% 50%, #000 62%, transparent 88%); }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- 封面 -->
+  <div class="card c1">
+    <div class="pageno">01 / 07</div>
+    <div class="badge">建议收藏 · AI 科普</div>
+    <div style="margin:auto 0">
+      <div class="kicker">大语言模型 · 一次讲清</div>
+      <h1 class="hero">AI 是怎么<br/>“读懂”<br/>你的话的<span style="color:#3d3ad4">？</span></h1>
+      <p class="body" style="margin-top:36px;max-width:22ch">它不是查字典，也不是背答案——读完这 7 张，你会知道它到底在干什么。</p>
+    </div>
+    <div class="foot">滑动看 →</div>
+    <div class="watermark">AI 科普手册 · 01</div>
+  </div>
+
+  <!-- 01 预测而非检索 -->
+  <div class="card c2">
+    <div class="pageno">02 / 07</div>
+    <div class="num">01</div>
+    <h2>它不查字典<br/>它在“猜下一个词”</h2>
+    <p class="body">模型内部没有一张“词义表”。它做的是：<strong>根据已有的上文，估算下一个词出现的概率</strong>，挑一个继续往下写。</p>
+    <img class="illus" src="assets/trim-human-ai-chat.jpg" alt="人与 AI 对话" />
+    <div class="watermark">AI 科普手册 · 02</div>
+  </div>
+
+  <!-- 02 切词与向量 -->
+  <div class="card c3">
+    <div class="pageno">03 / 07</div>
+    <div class="num">02</div>
+    <h2>一句话先被切成<br/>“词块”，再变成数字</h2>
+    <p class="body">你打的字先切成 <strong>token（词块）</strong>，每个词块会变成一串数字，也就是<strong>向量</strong>——意思相近的词，在数字空间里也靠得近。</p>
+    <div class="illus-box">
+      <img class="illus" style="margin-top:0" src="assets/trim-neural-layers.jpg" alt="向量与网络层" />
+    </div>
+    <div class="watermark">AI 科普手册 · 03</div>
+  </div>
+
+  <!-- 03 注意力机制 -->
+  <div class="card c4">
+    <div class="pageno">04 / 07</div>
+    <div class="num">03</div>
+    <h2>每个词都在<br/>“看”其他词</h2>
+    <p class="body">这就是<strong>注意力机制</strong>：读到“它”时，模型会去问“前面的谁和‘它’最相关”，再把相关词的信息<strong>加权取回来</strong>。</p>
+    <p class="body" style="margin-top:22px;opacity:.75;font-size:27px">例：<em>“小猫把毛线球滚到了沙发下，因为它困了。”</em> —— 模型需要判断“它”指的是小猫。</p>
+    <div class="foot" style="font-size:26px">相关度高的词，贡献更大。</div>
+    <div class="watermark">AI 科普手册 · 04</div>
+  </div>
+
+  <!-- 04 三步训练 -->
+  <div class="card c5">
+    <div class="pageno">05 / 07</div>
+    <div class="num">04</div>
+    <h2>它是分三步<br/>“练”出来的</h2>
+    <div class="steps">
+      <div class="step"><div class="dot" style="background:#4f46e5">1</div><p><b>预训练</b>：读遍互联网文本，学会“下一个词该是什么”。</p></div>
+      <div class="step"><div class="dot" style="background:#0e9488">2</div><p><b>指令微调</b>：用人工写的问答示范，学会“听懂指令”。</p></div>
+      <div class="step"><div class="dot" style="background:#ca8a04">3</div><p><b>对齐</b>：由人类打分排序，学会“好好说话、不乱说”。</p></div>
+    </div>
+    <img class="illus" src="assets/trim-robot-reading.jpg" alt="机器人读数据" style="margin-top:44px" />
+    <div class="watermark">AI 科普手册 · 05</div>
+  </div>
+
+  <!-- 05 幻觉从哪来 -->
+  <div class="card c6">
+    <div class="pageno">06 / 07</div>
+    <div class="num">05</div>
+    <h2>它为什么会<br/>一本正经地胡说</h2>
+    <p class="body">因为它的训练目标不是“说真话”，而是<strong>“接得像”</strong>。训练数据里没见过的内容，它会顺着语言习惯编一个<strong>最像真的</strong>答案。</p>
+    <p class="body" style="margin-top:26px">涉及<strong>数字、人名、文献、最新事件</strong>时，务必自己核对一遍。</p>
+    <div class="foot">这被称为“幻觉”（hallucination）。</div>
+    <div class="watermark">AI 科普手册 · 06</div>
+  </div>
+
+  <!-- 尾卡 -->
+  <div class="card c7">
+    <div class="pageno">07 / 07</div>
+    <div class="badge">记住这三件事</div>
+    <div style="margin-top:56px">
+      <p class="body" style="font-size:34px;line-height:1.75">
+        ① 它在<strong>预测</strong>，不是在检索；<br/>
+        ② 它的知识<strong>停在训练那一天</strong>；<br/>
+        ③ 好提示词 = <strong>给足上下文 + 说清目标</strong>。
+      </p>
+    </div>
+    <img class="illus" src="assets/trim-brain-circuit.jpg" alt="大脑电路" style="margin-top:auto;opacity:.95" />
+    <div class="foot" style="opacity:.8">关注 · 收藏 · 转给还在“神话 AI”的朋友</div>
+    <div class="watermark">AI 科普手册 · 07</div>
+  </div>
+
+</div>
+</body>
+</html>

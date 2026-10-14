@@ -1,24 +1,37 @@
 {
-  "name": "ai-motivation-graphics-render-bench",
+  "name": "ai-emotional-social-cards-bench",
   "private": true,
-  "description": "AI 鸡汤 / 涨粉图文 · 纯代码渲染方案实测仓库（项目本体不依赖任何 API；模型生图统一走 Arena 生图）",
-  "scripts": {
-    "setup": "bash archive/setup/render-env.sh && bash setup/local-browser.sh",
-    "gallery": "node setup/build-gallery.mjs",
-    "preview": "node setup/preview-server.mjs",
-    "optimize": "node setup/optimize-images.mjs runs",
-    "run:redbook": "cd projects/auto-redbook-skills && python3 scripts/render_xhs.py ../../runs/01-auto-redbook-skill/note.md -o ../../runs/01-auto-redbook-skill/out-botanical -t botanical -m separator --dpr 2",
-    "run:xhs-textcard": "cd projects/xhs-textcard && node tools/render-cards.mjs --md ../../runs/02-xhs-textcard/note.md --template elegant-book --out ../../runs/02-xhs-textcard/elegant-book --cover ../../runs/assets/arena/03-quiet-lake.png --signature 慢下来",
-    "run:markcard": "cd projects/markcard-studio && node tools/render-cards.mjs --md ../../runs/02-xhs-textcard/note.md --theme \"Swiss Grid\" --out ../../runs/03-markcard-studio/swiss-grid",
-    "dev:markcard": "cd projects/markcard-studio && npm run dev -- --host 0.0.0.0 --port 5180",
-    "run:takumi": "node projects/takumi/tools/quote-cards.mjs --content runs/04-takumi/quotes.json --out runs/04-takumi --bg-dir runs/assets/arena",
-    "run:article-cards": "cd projects/xiaohongshu-article-cards && node tools/fill-content.mjs --template assets/cream-editorial/card-generator.html --content ../../runs/05-article-cards/content.json --out ../../runs/05-article-cards/cream-editorial.html && CHROME_PATH=/tmp/chromium node scripts/render_cards.mjs ../../runs/05-article-cards/cream-editorial.html ../../runs/05-article-cards/cream-editorial cream"
-  },
+  "description": "AI 鸡汤图文 / 涨粉图文：不需要 API Key、纯代码渲染的开源方案实测仓库（模型生图那一步统一换成 Arena 的生图）",
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "playwright": "^1.64.0",
     "satori": "^0.56.1",
     "sharp": "^0.35.5",
     "takumi-js": "^2.15.2"
+  },
+  "scripts": {
+    "setup": "bash archive/setup/render-env.sh && bash setup/local-browser.sh",
+    "selftest": "node archive/setup/shot.mjs --selftest",
+
+    "run:01": "node runs/01-xhs-textcard/run.mjs",
+    "run:02": "cd projects/MarkCardStudio && npm i && npx vite build && cd ../.. && node runs/02-markcardstudio/run.mjs",
+    "run:03": "node runs/03-article-tools/run.mjs",
+    "run:04": "node runs/04-write-then-publish/run.mjs",
+    "run:05": "node runs/05-ah-xhs-cover-title/run.mjs",
+    "run:06": "node runs/06-arena-imagegen/run.mjs",
+    "run:all": "npm run run:01 && npm run run:03 && npm run run:04 && npm run run:05 && npm run run:06",
+
+    "run:07": "cd projects/auto-redbook-skills && python3 scripts/render_xhs.py ../../runs/07-auto-redbook-skills/note.md -o ../../runs/07-auto-redbook-skills/out-botanical -t botanical -m separator --dpr 2",
+    "run:08": "cd projects/XHS-TextCard && node tools/render-cards.mjs --md ../../runs/08-xhs-textcard/note.md --template elegant-book --out ../../runs/08-xhs-textcard/elegant-book --cover ../../runs/assets/arena/03-quiet-lake.png --signature 慢下来",
+    "run:09": "cd projects/MarkCardStudio && node tools/render-cards.mjs --md ../../runs/08-xhs-textcard/note.md --theme \"Swiss Grid\" --out ../../runs/09-markcard-studio/swiss-grid",
+    "run:10": "node projects/takumi/tools/quote-cards.mjs --content runs/10-takumi/quotes.json --out runs/10-takumi --bg-dir runs/assets/arena",
+    "run:11": "cd projects/xiaohongshu-article-cards && node tools/fill-content.mjs --template assets/cream-editorial/card-generator.html --content ../../runs/11-xiaohongshu-article-cards/content.json --out ../../runs/11-xiaohongshu-article-cards/cream-editorial.html && CHROME_PATH=/tmp/chromium node scripts/render_cards.mjs ../../runs/11-xiaohongshu-article-cards/cream-editorial.html ../../runs/11-xiaohongshu-article-cards/cream-editorial cream",
+    "run:12": "node setup/satori-cards.mjs --content runs/12-satori/quotes.json --out runs/12-satori --bg-dir runs/assets/arena",
+    "run:all:local": "npm run run:07 && npm run run:08 && npm run run:10 && npm run run:11 && npm run run:12",
+
+    "dev:markcard": "cd projects/MarkCardStudio && npm run dev -- --host 0.0.0.0 --port 5180",
+    "gallery": "node setup/build-gallery.mjs",
+    "preview": "node setup/preview-server.mjs",
+    "optimize": "node setup/optimize-images.mjs runs"
   }
 }

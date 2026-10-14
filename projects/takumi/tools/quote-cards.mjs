@@ -8,8 +8,8 @@
  *
  * 用法：
  *   node projects/takumi/tools/quote-cards.mjs \
- *     --content runs/04-takumi/quotes.json \
- *     --out runs/04-takumi --bg-dir runs/assets/arena
+ *     --content runs/10-takumi/quotes.json \
+ *     --out runs/10-takumi --bg-dir runs/assets/arena
  *
  * 依赖：npm i takumi-js（仓库根目录已声明）
  * 字体：默认读 ~/.fonts 下的 Noto Sans SC / Noto Serif SC（沙箱脚本见 archive/setup/render-env.sh）
@@ -26,8 +26,8 @@ const FONT_DIR = process.env.FONT_DIR || path.join(HOME, '.fonts');
 // ------------------------------------------------------------------ 参数
 const argv = process.argv.slice(2);
 const arg = (n, d) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : d; };
-const contentPath = path.resolve(arg('--content', 'runs/04-takumi/quotes.json'));
-const outDir = path.resolve(arg('--out', 'runs/04-takumi'));
+const contentPath = path.resolve(arg('--content', 'runs/10-takumi/quotes.json'));
+const outDir = path.resolve(arg('--out', 'runs/10-takumi'));
 const bgDir = arg('--bg-dir');
 
 // ------------------------------------------------------------------ 字体

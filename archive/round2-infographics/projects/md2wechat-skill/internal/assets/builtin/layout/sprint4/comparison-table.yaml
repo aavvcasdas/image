@@ -1,0 +1,70 @@
+schema_version: "1"
+name: comparison-table
+lifecycle: recommended
+body_format: json_object
+version: "1.0.0"
+since: "1.5.0"
+category: sprint4
+input_positions: [json]
+serves: [readability, attention]
+content_types: [opinion, tutorial, report]
+industry: [general]
+tags: [sprint4, comparison-table, pros-cons, tradeoff, evaluation]
+position: body
+when_to_use: |
+  方案对比、选型分析、优缺点梳理。
+  适合需要并排展示正反两面的场景。
+when_not_to_use: |
+  多行多维度对比用 compare；
+  纯数据对比用 metrics。
+pairs_well_with: [compare, verdict, specs]
+avoid_combining_with: []
+anti_pattern: |
+  内容必须写成 JSON 对象格式：{"left":{"title":"...","items":[...]},"right":{"title":"...","items":[...]}}，不支持 pipe 分隔行；
+  缺少 left 或 right 任何一个导致渲染失败；
+  items 必须是字符串数组，不是字符串；
+  优点列写成中性描述而非真实优势；
+  缺点列写得太轻描淡写失去可信度。
+fields:
+  required:
+    - name: left.title
+      description: 左侧栏标题（JSON path：left.title）
+      example: "优点"
+    - name: left.items
+      description: 左侧条目列表（JSON path：left.items，字符串数组）
+      example: '["快速部署","低成本","易上手"]'
+    - name: right.title
+      description: 右侧栏标题（JSON path：right.title）
+      example: "缺点"
+    - name: right.items
+      description: 右侧条目列表（JSON path：right.items，字符串数组）
+      example: '["扩展性差","依赖第三方"]'
+  optional: []
+example: |
+  :::comparison-table
+  {"left":{"title":"优点","items":["快速部署","低成本","易上手"]},"right":{"title":"缺点","items":["扩展性差","依赖第三方"]}}
+  :::
+agent_contract:
+  body_format: json_object
+  required:
+    - left.title
+    - left.items
+    - right.title
+    - right.items
+  optional: []
+  enums: {}
+  defaults: {}
+  invalid:
+    - malformed-json
+    - missing-side
+    - blank-title
+    - empty-items
+    - wrong-type
+  ignored:
+    - unknown-keys
+  legacy: []
+  applicability: {}
+metadata:
+  author: md2wechat
+  provenance: builtin
+  inspired_by: "advanced-layout-modules-guide.md#comparison-table"

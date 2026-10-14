@@ -29,9 +29,9 @@ const MIME = {
   '.woff2': 'font/woff2', '.otf': 'font/otf', '.ttf': 'font/ttf', '.pdf': 'application/pdf',
 };
 
-/** /app/xhs-textcard/... → projects/xhs-textcard/... */
+/** /app/xhs-textcard/... → projects/XHS-TextCard/... */
 const APP_MAP = {
-  'xhs-textcard': 'projects/xhs-textcard',
+  'xhs-textcard': 'projects/XHS-TextCard',
   'article-cards': 'projects/xiaohongshu-article-cards',
   'takumi': 'projects/takumi',
 };
